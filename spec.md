@@ -68,38 +68,149 @@ members = [
 ### `archiver-db`
 - **Purpose**: Persistence layer with deduplication.
 - **Implementation**: `sled` (Embedded KV store).
+- **Database Schema**:
+    - **Tree: `packages`** - Stores package entries (key: `"attr_name:version"`, value: serialized `PackageEntry`)
+    - **Tree: `processed_commits`** - Tracks successfully indexed commits (key: commit SHA, value: timestamp)
 - **Write Logic**: `insert_if_better(entry)` – overwrites existing version only when new entry has newer timestamp.
+- **Commit Tracking**:
+    - Commits are marked as processed **only after** successful batch completion and database flush
+    - This ensures resumability: interrupted indexing can safely restart without data loss
+    - Skips already-processed commits on restart for efficiency
 - **Features**: 
     - Package entry storage and retrieval
-    - Processed commits tracking
+    - Processed commits tracking with atomic batch commits
     - Version listing by package name
+    - Flush control for batch operations
 - **Status**: ✅ Implemented with tests
 
 ### `archiver-index`
 - **Purpose**: ETL (Extract, Transform, Load) engine.
-- **Dependencies**: `git2-rs`, `regex`, `sha2`.
+- **Dependencies**: `git2-rs`, `regex`, `sha2`, `rayon` (parallel processing), `chrono`.
 - **Logic**:
     1. Iterating through Git history of Nixpkgs.
-    2. Parsing `.nix` files for version strings (regex-based).
-    3. Generating NAR hash from Git tree objects (TODO: full implementation).
+    2. Parsing `.nix` files for version strings (regex-based with validation).
+    3. Generating NAR hash from Git blob objects using custom NAR serialization.
     4. Tracking progress in `processed_commits` table.
-- **Status**: ✅ Core implementation done, NAR hashing pending
+    5. Parallel batch processing (configurable batch size, default 100) using Rayon thread pool.
+- **Performance Features**:
+    - **Parallel Processing**: Uses Rayon to process commits across multiple CPU cores
+    - **Batch Processing**: Commits are processed in configurable batches (default: 100 commits)
+    - **Reduced I/O**: Database flush every 5 batches (500 commits by default) to minimize overhead
+    - **Thread Control**: Configurable thread count via CLI (`-j/--threads`)
+    - **Batch Size Control**: Configurable batch size via CLI (`-b/--batch-size`)
+    - **Progress Tracking**: Real-time speed calculation, ETA estimation, and detailed statistics
+    - **NAR Hashing**: Custom implementation following Nix NAR specification, outputs SHA256 in SRI format
+- **Version Validation**:
+    - Filters out Nix code patterns (interpolations, function calls) from version strings
+    - Ensures versions contain at least one digit
+    - Validates character set (alphanumeric, dots, hyphens, underscores, plus signs)
+- **Resumability**:
+    - Commits marked as processed only after successful batch completion and flush
+    - Safe restart after interruption - no duplicate processing or data loss
+    - Progress logging with commit counts and package statistics
+- **Status**: ✅ Fully implemented with parallel processing and NAR hashing
 
 ### `archiver-cli`
 - **Purpose**: CLI interface and user configuration validation.
 - **Commands**:
-    - `index` - Index Nixpkgs repository
-    - `search` - Search for package versions
+    - `index` - Index Nixpkgs repository with parallel processing
+        - Options: `--repo`, `--from`, `--max-commits`, `--threads`, `--batch-size`
+        - Enhanced progress logging with speed, ETA, and statistics
+        - Configurable thread count and batch size for performance tuning
+    - `search` - Search for package versions with table-formatted output
+        - Table display with version, commit SHA, date, and NAR hash
+        - Fuzzy matching suggestions for typos
+        - Color-coded output with emoji indicators
     - `stats` - Display database statistics
     - `generate` - Generate `frozen.nix` file (TODO)
 - **Features**:
-    - Fuzzy matching for version suggestions
+    - Fuzzy matching for version suggestions (using `strsim`)
     - Error handling with helpful suggestions
-- **Status**: ✅ Basic CLI implemented, `generate` command pending
+    - Comprehensive logging system (INFO/DEBUG/WARN/ERROR levels)
+    - Progress tracking with real-time metrics
+    - Table-formatted output using `tabled` library
+    - Human-readable timestamps and durations
+    - Number formatting with thousand separators
+- **Logging Features**:
+    - Startup information (threads, repository, commit details)
+    - Batch progress with speed and ETA
+    - Final statistics summary (time, commits, packages, speed, errors)
+    - Debug mode with flush timing and thread utilization
+- **Status**: ✅ CLI implemented with enhanced logging, `generate` command pending
 
 ---
 
-## 5. Logical Constraints & Business Rules
+## 5. Resumable Indexing & Performance Optimization
+
+### Commit Tracking Mechanism
+The indexer implements a robust commit tracking system that ensures safe resumability:
+
+1. **Two-Phase Commit**: 
+   - Phase 1: Process commits in parallel, extract packages
+   - Phase 2: Flush to database, then mark commits as processed
+   
+2. **Atomicity Guarantee**:
+   - Commits are marked as processed **only after** successful database flush
+   - If process is interrupted (Ctrl+C, crash), uncommitted batches are reprocessed on restart
+   - No risk of partial data or lost packages
+
+3. **Batch Processing**:
+   - Default batch size: 100 commits (configurable via `-b/--batch-size`)
+   - Flush interval: every 5 batches (500 commits by default)
+   - Commits within a batch are marked atomically after flush
+   - Can be adjusted based on available memory and I/O characteristics
+
+4. **Skip Logic**:
+   - On startup, `is_commit_processed()` checks each commit
+   - Already-processed commits are skipped (counted in "skipped" metric)
+   - Only new/incomplete commits are processed
+
+### Performance Features
+
+1. **Parallel Processing**:
+   - Uses Rayon thread pool for multi-core utilization
+   - Default: number of CPU cores
+   - Configurable via `-j/--threads` option
+   - Recommendation: 1.5-2x CPU cores for I/O-bound operations
+
+2. **Batch Size Tuning**:
+   - Default: 100 commits per batch
+   - Configurable via `-b/--batch-size` option
+   - Smaller batches: more frequent progress updates, better for limited memory
+   - Larger batches: better CPU utilization, higher throughput
+   - Recommendation: 100-500 for typical use, 500-1000 for high-performance systems
+
+3. **I/O Optimization**:
+   - Reduced database flush frequency (every 5 batches)
+   - Minimizes disk I/O overhead
+   - Significantly improves throughput
+
+4. **Progress Tracking**:
+   - Real-time speed calculation (commits/s, packages/s)
+   - ETA estimation based on current speed
+   - Detailed statistics at completion
+
+5. **Logging Levels**:
+   - **INFO**: Progress updates, final statistics
+   - **DEBUG**: Flush timing, thread utilization, detailed metrics
+   - **WARN/ERROR**: Issues and failures
+
+### Performance Metrics Example
+```
+⚡ Batch #2 | Commits: 1,000/5,000 (20%) | Packages: 2,567 inserted (4,890 found) | Speed: 95.2 commits/s | ETA: 42s
+
+📊 Final Statistics:
+   • Total time:        52.5s
+   • Commits processed: 5,000 (4,850 new, 150 skipped)
+   • Packages found:    24,567
+   • Packages inserted: 12,890 (11,677 duplicates filtered)
+   • Average speed:     95.2 commits/s, 245.5 packages/s
+   • Errors:            0
+```
+
+---
+
+## 6. Logical Constraints & Business Rules
 1. **Deterministic Matching**: If `nodejs 1.3` never existed in Nixpkgs, the tool **does not guess**. It must return an error and suggest nearest available versions (e.g., 1.2 or 1.4).
 2. **Channel Agnosticism**: Primary focus on `nixos-unstable` channel for maximum version density, with optional support for stable channels.
 3. **Storage Efficiency**: Removing processed Git objects after indexing. Local database should occupy megabytes (MB), not gigabytes (GB).
@@ -112,10 +223,13 @@ members = [
 - [x] **Phase 2**: Integration of `archiver-db` with Sled and deduplication logic.
 - [x] **Phase 3**: Git walker in `archiver-index` using `git2-rs`.
 - [x] **Phase 4**: CLI with error handling and basic commands.
-- [ ] **Phase 5**: Complete NAR hashing implementation (Nix-independent).
-- [ ] **Phase 6**: `generate` command for `frozen.nix` file creation.
-- [ ] **Phase 7**: Enhanced version detection (pname + version parsing).
-- [ ] **Phase 8**: Performance optimizations (parallel processing, caching).
+- [x] **Phase 5a**: Version validation and filtering (Nix code detection).
+- [x] **Phase 5b**: Complete NAR hashing implementation (Nix-independent).
+- [x] **Phase 6a**: Enhanced search output with table formatting.
+- [x] **Phase 7**: Parallel processing with Rayon for multi-core utilization.
+- [x] **Phase 8a**: Comprehensive logging system with progress tracking and statistics.
+- [x] **Phase 8b**: Resumable indexing with atomic commit tracking.
+- [ ] **Phase 6b**: `generate` command for `frozen.nix` file creation.
 - [ ] **Phase 9 (Future)**: Cloud API (Axum), PostgreSQL migration, Next.js frontend.
 
 ---
@@ -125,14 +239,17 @@ members = [
 **Current Coverage**:
 - `archiver-core`: 2 unit tests (PackageEntry key, Nix generation)
 - `archiver-db`: 2 unit tests (insert/get, deduplication)
-- `archiver-index`: 2 unit tests (regex, path extraction)
+- `archiver-index`: 5 unit tests (regex, path extraction, version validation, NAR hash computation, NAR hash padding)
 - `archiver-cli`: 1 unit test (CLI parsing)
+- **Total**: 10 tests, all passing ✅
 
 **Future Tests**:
 - Integration tests with real Nixpkgs repo (small subset)
 - Fuzzy matching accuracy tests
 - NAR hash validation against Nix binary outputs
-- Performance benchmarks (commits/second)
+- Performance benchmarks (commits/second, packages/second)
+- Resumability tests (interrupt and restart scenarios)
+- Thread safety tests for parallel processing
 
 ---
 

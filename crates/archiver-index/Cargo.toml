@@ -16,3 +16,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
 semver = { workspace = true }
+rayon = { workspace = true }
+chrono = { workspace = true }
+nix-nar = { workspace = true }

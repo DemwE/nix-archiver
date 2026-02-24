@@ -10,6 +10,8 @@ use archiver_db::ArchiverDb;
 use archiver_index::Indexer;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tabled::{Table, Tabled, settings::Style};
+use chrono::{DateTime, Utc};
 
 #[derive(Parser)]
 #[command(name = "nix-archiver")]
@@ -43,6 +45,14 @@ enum Commands {
         /// Maximum number of commits to process
         #[arg(short, long)]
         max_commits: Option<usize>,
+
+        /// Number of threads for parallel processing (default: number of CPU cores)
+        #[arg(short = 'j', long)]
+        threads: Option<usize>,
+
+        /// Batch size for parallel processing (default: 100)
+        #[arg(short = 'b', long, default_value = "100")]
+        batch_size: usize,
     },
 
     /// Searches for a specific package version
@@ -82,8 +92,8 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to open database at {:?}", cli.database))?;
 
     match cli.command {
-        Commands::Index { repo, from, max_commits } => {
-            cmd_index(repo, from, max_commits, db)?;
+        Commands::Index { repo, from, max_commits, threads, batch_size } => {
+            cmd_index(repo, from, max_commits, threads, batch_size, db)?;
         }
         Commands::Search { attr_name, version } => {
             cmd_search(attr_name, version, db)?;
@@ -100,9 +110,22 @@ fn main() -> Result<()> {
 }
 
 /// Indexes Nixpkgs repository
-fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>, db: ArchiverDb) -> Result<()> {
+fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>, threads: Option<usize>, batch_size: usize, db: ArchiverDb) -> Result<()> {
+    // Configure Rayon thread pool if specified
+    let num_threads = if let Some(num_threads) = threads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build_global()
+            .context("Failed to configure thread pool")?;
+        num_threads
+    } else {
+        rayon::current_num_threads()
+    };
+    
+    // Log startup information
     log::info!("Starting indexing of repository at {:?}", repo_path);
-    log::info!("From commit: {}", from_commit);
+    log::info!("Using {} threads for parallel processing", num_threads);
+    log::info!("Batch size: {} commits", batch_size);
     if let Some(max) = max_commits {
         log::info!("Max commits: {}", max);
     }
@@ -117,12 +140,10 @@ fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>
         from_commit
     };
 
-    let stats = indexer.index_from_commit(&commit_sha, max_commits)
+    let _stats = indexer.index_from_commit(&commit_sha, max_commits, batch_size)
         .context("Failed to index repository")?;
 
-    log::info!("Indexing completed!");
-    log::info!("{}", stats);
-
+    // Final stats are already logged by the indexer
     Ok(())
 }
 
@@ -135,31 +156,64 @@ fn resolve_head(repo_path: &PathBuf) -> Result<String> {
     Ok(commit.id().to_string())
 }
 
+/// Table row for displaying package versions
+#[derive(Tabled)]
+struct VersionRow {
+    #[tabled(rename = "Version")]
+    version: String,
+    #[tabled(rename = "Commit")]
+    commit: String,
+    #[tabled(rename = "Date")]
+    date: String,
+    #[tabled(rename = "NAR Hash")]
+    nar_hash: String,
+}
+
 /// Searches for package in database
 fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Result<()> {
     if let Some(ver) = version {
         // Search for specific version
         match db.get(&attr_name, &ver)? {
             Some(entry) => {
-                println!("Found: {}", entry);
-                println!("\nNix expression:");
+                println!("\n📦 Package: {} v{}", attr_name, ver);
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                println!("  Commit:    {}", entry.commit_sha);
+                println!("  Date:      {}", format_timestamp(entry.timestamp));
+                println!("  NAR Hash:  {}", entry.nar_hash);
+                println!("\n📝 Nix expression:");
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 println!("{}", entry.to_nix_import());
             }
             None => {
-                eprintln!("Package {}:{} not found in database", attr_name, ver);
+                eprintln!("❌ Package {}:{} not found in database", attr_name, ver);
                 
                 // Suggest available versions
                 let all_versions = db.get_all_versions(&attr_name)?;
                 if !all_versions.is_empty() {
-                    eprintln!("\nAvailable versions for {}:", attr_name);
-                    for entry in all_versions.iter().take(10) {
-                        eprintln!("  - {} (commit {})", entry.version, &entry.commit_sha[..8]);
-                    }
+                    eprintln!("\n💡 Available versions for {}:", attr_name);
+                    let rows: Vec<VersionRow> = all_versions.iter()
+                        .take(10)
+                        .map(|entry| VersionRow {
+                            version: entry.version.clone(),
+                            commit: entry.commit_sha[..12].to_string(),
+                            date: format_timestamp(entry.timestamp),
+                            nar_hash: if entry.nar_hash == "unknown" { 
+                                "-".to_string() 
+                            } else { 
+                                entry.nar_hash[..16].to_string() + "..." 
+                            },
+                        })
+                        .collect();
+                    
+                    let mut table = Table::new(rows);
+                    table.with(Style::rounded());
+                    eprintln!("{}", table);
+                    
                     if all_versions.len() > 10 {
-                        eprintln!("  ... and {} more", all_versions.len() - 10);
+                        eprintln!("\n  ... and {} more versions", all_versions.len() - 10);
                     }
                 } else {
-                    eprintln!("\nNo versions found for package '{}'", attr_name);
+                    eprintln!("\n❌ No versions found for package '{}'", attr_name);
                 }
                 
                 std::process::exit(1);
@@ -170,16 +224,26 @@ fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Res
         let all_versions = db.get_all_versions(&attr_name)?;
         
         if all_versions.is_empty() {
-            println!("No versions found for package '{}'", attr_name);
+            println!("❌ No versions found for package '{}'", attr_name);
         } else {
-            println!("Found {} versions of {}:", all_versions.len(), attr_name);
-            for entry in all_versions {
-                println!("  - {} @ {} ({})", 
-                    entry.version, 
-                    &entry.commit_sha[..8],
-                    format_timestamp(entry.timestamp)
-                );
-            }
+            println!("\n📦 Found {} versions of '{}':\n", all_versions.len(), attr_name);
+            
+            let rows: Vec<VersionRow> = all_versions.iter()
+                .map(|entry| VersionRow {
+                    version: entry.version.clone(),
+                    commit: entry.commit_sha[..12].to_string(),
+                    date: format_timestamp(entry.timestamp),
+                    nar_hash: if entry.nar_hash == "unknown" { 
+                        "-".to_string() 
+                    } else { 
+                        entry.nar_hash[..16].to_string() + "..." 
+                    },
+                })
+                .collect();
+            
+            let mut table = Table::new(rows);
+            table.with(Style::rounded());
+            println!("{}", table);
         }
     }
 
@@ -204,10 +268,9 @@ fn cmd_stats(db: ArchiverDb) -> Result<()> {
 
 /// Formats Unix timestamp to readable date
 fn format_timestamp(timestamp: u64) -> String {
-    use std::time::{Duration, UNIX_EPOCH};
-    let datetime = UNIX_EPOCH + Duration::from_secs(timestamp);
-    // Simple formatting - in production use chrono library
-    format!("{:?}", datetime)
+    let dt = DateTime::<Utc>::from_timestamp(timestamp as i64, 0)
+        .unwrap_or_else(|| DateTime::<Utc>::MIN_UTC);
+    dt.format("%Y-%m-%d %H:%M").to_string()
 }
 
 #[cfg(test)]

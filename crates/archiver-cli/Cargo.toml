@@ -18,3 +18,6 @@ log = { workspace = true }
 env_logger = { workspace = true }
 clap = { workspace = true }
 strsim = { workspace = true }
+tabled = { workspace = true }
+chrono = { workspace = true }
+rayon = { workspace = true }
