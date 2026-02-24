@@ -6,10 +6,10 @@ Ten dokument opisuje wszystkie metody instalacji nix-archiver - od szybkiego sta
 
 ```bash
 # Dla użytkowników Nix z Flakes
-nix profile install github:DemwE/nix-archiver
+nix profile install github:TWOJ_USERNAME/nix-archiver
 
 # Dla użytkowników bez Nix
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 cargo install --path crates/archiver-cli
 ```
@@ -22,10 +22,10 @@ cargo install --path crates/archiver-cli
 
 ```bash
 # Zainstaluj bezpośrednio z GitHub
-nix profile install github:DemwE/nix-archiver
+nix profile install github:TWOJ_USERNAME/nix-archiver
 
 # Użyj bez instalacji
-nix run github:DemwE/nix-archiver -- search nodejs
+nix run github:TWOJ_USERNAME/nix-archiver -- search nodejs
 
 # Weryfikuj
 nix-archiver --version
@@ -35,7 +35,7 @@ nix-archiver --version
 
 ```bash
 # Sklonuj repo
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj
@@ -51,7 +51,7 @@ nix shell . -c nix-archiver --help
 
 ```bash
 # Sklonuj repozytorium
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj przez nix-env
@@ -76,17 +76,48 @@ let
   # Import pakietu z lokalnego źródła
   nix-archiver = pkgs.callPackage /path/to/nix-archiver/default.nix {};
   
-  # LUB z GitHub (wymaga fetchFromGitHub)
-  nix-archiver = pkgs.callPackage (pkgs.fetchFromGitHub {
+  # LUB z GitHub (zalecane - działająca konfiguracja)
+  nix-archiver = (pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "DemwE";
     repo = "nix-archiver";
-    rev = "main";  # lub konkretny commit/tag
-    sha256 = "0000000000000000000000000000000000000000000000000000";  # użyj nix-prefetch-url
-  }) {};
+    rev = "master";  # branch master (nie main)
+    sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
+  }) {}).overrideAttrs (oldAttrs: {
+    # Dodatkowe buildy dla OpenSSL
+    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.openssl ];
+    nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config pkgs.perl ];
+    OPENSSL_NO_VENDOR = "1";  # Używa systemowego OpenSSL
+  });
 in
 {
   environment.systemPackages = [ nix-archiver ];
 }
+```
+
+**Uwagi techniczne:**
+
+1. **Branch `master`**: Repozytorium używa brancha `master` (nie `main`)
+2. **Hash SHA256**: Użyj `nix-prefetch-url` aby uzyskać aktualny hash:
+   ```bash
+   nix-prefetch-url --unpack https://github.com/DemwE/nix-archiver/archive/master.tar.gz
+   ```
+3. **OpenSSL fix**: `overrideAttrs` rozwiązuje problem z vendored OpenSSL:
+   - `OPENSSL_NO_VENDOR = "1"` wymusza użycie systemowego OpenSSL
+   - Dodaje `openssl`, `pkg-config`, `perl` do build dependencies
+   - Konieczne jeśli pojawia się błąd kompilacji związany z OpenSSL
+
+**Aktualizacja hasha po zmianach w repo:**
+
+```bash
+# Pobierz nowy hash
+NEW_HASH=$(nix-prefetch-url --unpack https://github.com/DemwE/nix-archiver/archive/master.tar.gz)
+
+# Lub użyj konkretnego commita
+NEW_HASH=$(nix-prefetch-url --unpack https://github.com/DemwE/nix-archiver/archive/COMMIT_SHA.tar.gz)
+
+# Zamień w configuration.nix
+# sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
+# na nowy hash
 ```
 
 Rebuild:
@@ -139,7 +170,7 @@ Dla systemów używających flakes (`/etc/nixos/flake.nix`):
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nix-archiver.url = "github:DemwE/nix-archiver";
+    nix-archiver.url = "github:TWOJ_USERNAME/nix-archiver";
   };
 
   outputs = { self, nixpkgs, nix-archiver }: {
@@ -223,7 +254,7 @@ brew install pkg-config openssl git
 
 ```bash
 # Sklonuj repozytorium
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 
 # Instaluj przez cargo (do ~/.cargo/bin)
@@ -253,7 +284,7 @@ Dla kontrybutorów i developerów.
 ### Z Nix (zalecane)
 
 ```bash
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 
 # Wejdź do dev shell
@@ -271,7 +302,7 @@ cargo run --bin nix-archiver -- --help
 ### Bez Nix
 
 ```bash
-git clone https://github.com/DemwE/nix-archiver.git
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj Rust (jeśli nie masz)
@@ -320,7 +351,7 @@ nix-archiver help stats
 nix profile remove nix-archiver
 
 # Zainstaluj nową
-nix profile install github:DemwE/nix-archiver
+nix profile install github:TWOJ_USERNAME/nix-archiver
 
 # Lub update (jeśli zainstalowane z GitHub)
 nix profile upgrade '.*nix-archiver.*'
@@ -391,59 +422,17 @@ sudo rm /usr/local/bin/nix-archiver
 
 ## Troubleshooting
 
-### "command not found: nix-archiver"
+Napotkałeś problemy z instalacją? Zobacz **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** dla szczegółowych rozwiązań.
 
-**Nix Profile:**
-```bash
-# Sprawdź czy jest zainstalowane
-nix profile list | grep nix-archiver
+### Najczęstsze problemy:
 
-# Sprawdź PATH
-echo $PATH | grep .nix-profile
-```
+- ❌ **"error building OpenSSL"** → [OpenSSL build fix](TROUBLESHOOTING.md#-błąd-error-building-openssl-lub-vendored-openssl-compilation-failed)
+- ❌ **"hash mismatch"** → [Hash update instructions](TROUBLESHOOTING.md#-błąd-hash-mismatch-podczas-instalacji-z-github)
+- ❌ **"command not found: nix-archiver"** → [PATH configuration](TROUBLESHOOTING.md#-command-not-found-nix-archiver)
+- ❌ **"flakes is disabled"** → [Enable flakes](TROUBLESHOOTING.md#-błąd-experimental-nix-feature-flakes-is-disabled)
+- ❌ **Cargo build errors** → [Dependencies check](TROUBLESHOOTING.md#-błąd-error-building-openssl-lub-vendored-openssl-compilation-failed)
 
-**Cargo:**
-```bash
-# Sprawdź czy jest w ~/.cargo/bin
-ls -la ~/.cargo/bin/nix-archiver
-
-# Dodaj do PATH
-export PATH="$HOME/.cargo/bin:$PATH"
-```
-
-### "error: experimental Nix feature 'flakes' is disabled"
-
-Włącz flakes w `/etc/nix/nix.conf`:
-```
-experimental-features = nix-command flakes
-```
-
-Lub użyj flag:
-```bash
-nix --extra-experimental-features 'nix-command flakes' profile install github:DemwE/nix-archiver
-```
-
-### "error: hash mismatch" podczas instalacji w NixOS
-
-Użyj `nix-prefetch-url` aby uzyskać poprawny hash:
-
-```bash
-nix-prefetch-url --unpack https://github.com/DemwE/nix-archiver/archive/main.tar.gz
-```
-
-### Build errors z Cargo
-
-Upewnij się że masz wszystkie zależności:
-```bash
-# Ubuntu/Debian
-sudo apt install build-essential pkg-config libssl-dev
-
-# Sprawdź wersję Rust (wymaga 1.70+)
-rustc --version
-
-# Aktualizuj Rust
-rustup update stable
-```
+Pełna dokumentacja rozwiązywania problemów: **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
 
 ---
 
@@ -460,6 +449,7 @@ Po instalacji:
 ## Zobacz także
 
 - [README.md](../README.md) - Główna dokumentacja
+- **[TROUBLESHOOTING.md](../TROUBLESHOOTING.md)** - 🔧 Rozwiązywanie problemów
 - [modules/README.md](../modules/README.md) - Dokumentacja modułu NixOS
 - [ROADMAP.md](../ROADMAP.md) - Plan rozwoju
 - [TESTING.md](../TESTING.md) - Instrukcje testowania

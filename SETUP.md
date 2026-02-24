@@ -34,7 +34,32 @@ Następujące pliki zawierają właściwy URL GitHub:
 
 ## 🎯 Instalacja w NixOS
 
-Możesz użyć pełnego modułu NixOS:
+### Opcja A: Prosty pakiet z GitHub (przetestowana konfiguracja)
+
+```nix
+# /etc/nixos/configuration.nix
+{ config, pkgs, ... }:
+
+let
+  nix-archiver = (pkgs.callPackage (pkgs.fetchFromGitHub {
+    owner = "DemwE";
+    repo = "nix-archiver";
+    rev = "master";  # branch master (nie main)
+    sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
+  }) {}).overrideAttrs (oldAttrs: {
+    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.openssl ];
+    nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config pkgs.perl ];
+    OPENSSL_NO_VENDOR = "1";  # Używa systemowego OpenSSL
+  });
+in
+{
+  environment.systemPackages = [ nix-archiver ];
+}
+```
+
+**Uwaga**: `overrideAttrs` rozwiązuje problemy z kompilacją OpenSSL.
+
+### Opcja B: Pełny moduł NixOS z lokalnego repo
 
 ```nix
 # /etc/nixos/configuration.nix

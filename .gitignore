@@ -15,6 +15,7 @@ result-*
 # Database
 *.db
 *.db-*
+nix-archiver.db/
 
 # OS
 .DS_Store
@@ -22,6 +23,15 @@ Thumbs.db
 
 # Env
 .env
+.envrc
 
-# lock files
-*.lock*
+# Generated files
+frozen.nix
+packages.nix
+overlay.nix
+
+# Nixpkgs repository (local clone for testing)
+nixpkgs/
+
+# Keep Cargo.lock for reproducible builds
+# !Cargo.lock is tracked by git

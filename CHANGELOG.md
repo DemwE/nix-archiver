@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - NixOS Installation Configuration
+
+#### Working NixOS Configuration for GitHub Installation
+- **OpenSSL Build Fix**: Added `overrideAttrs` configuration to resolve OpenSSL compilation issues
+  - Set `OPENSSL_NO_VENDOR = "1"` to use system OpenSSL instead of vendored version
+  - Added `openssl` to `buildInputs`
+  - Added `pkg-config` and `perl` to `nativeBuildInputs`
+- **Branch Correction**: Updated examples to use `master` branch instead of `main`
+- **Verified Hash**: Documented working SHA256 hash for current master branch
+- **Updated Documentation**:
+  - `README.md` - Added working configuration example
+  - `INSTALL.md` - Updated Method 3 with technical notes and hash update instructions
+  - `SETUP.md` - Added tested configuration as Option A
+
+#### Configuration Example
+```nix
+let
+  nix-archiver = (pkgs.callPackage (pkgs.fetchFromGitHub {
+    owner = "DemwE";
+    repo = "nix-archiver";
+    rev = "master";
+    sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
+  }) {}).overrideAttrs (oldAttrs: {
+    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.openssl ];
+    nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config pkgs.perl ];
+    OPENSSL_NO_VENDOR = "1";
+  });
+in { environment.systemPackages = [ nix-archiver ]; }
+```
+
 ### Added - NixOS Module (Level 1 Integration)
 
 #### Module Implementation

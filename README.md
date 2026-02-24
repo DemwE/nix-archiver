@@ -26,7 +26,9 @@ nix-archiver search nodejs           # Znajdź wersje pakietu
 nix-archiver stats                   # Pokaż statystyki bazy
 ```
 
-📖 **Szczegółowe instrukcje instalacji**: Zobacz [INSTALL.md](INSTALL.md) dla wszystkich metod instalacji.
+📖 **Instalacja w NixOS**: Zobacz [QUICK_START.md](QUICK_START.md) dla gotowych do skopiowania konfiguracji.
+
+📖 **Szczegółowe instrukcje**: Zobacz [INSTALL.md](INSTALL.md) dla wszystkich metod instalacji.
 
 Dla pełnej integracji z NixOS, zobacz sekcję [Użycie - NixOS Module](#opcja-1-nixos-module-zalecane-dla-użytkowników-nixos).
 
@@ -87,17 +89,30 @@ cargo install --path crates/archiver-cli  # z Cargo
 # /etc/nixos/configuration.nix
 { config, pkgs, ... }:
 
+let
+  # Pakiet z GitHub (działająca konfiguracja)
+  nix-archiver = (pkgs.callPackage (pkgs.fetchFromGitHub {
+    owner = "DemwE";
+    repo = "nix-archiver";
+    rev = "master";
+    sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
+  }) {}).overrideAttrs (oldAttrs: {
+    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.openssl ];
+    nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config pkgs.perl ];
+    OPENSSL_NO_VENDOR = "1";
+  });
+in
 {
   # Prosty pakiet
-  environment.systemPackages = [ 
-    (pkgs.callPackage /path/to/nix-archiver/default.nix {})
-  ];
+  environment.systemPackages = [ nix-archiver ];
   
   # LUB pełny moduł z auto-indeksowaniem (zalecane)
-  imports = [ /path/to/nix-archiver/modules/nix-archiver.nix ];
-  services.nix-archiver.enable = true;
+  # imports = [ /path/to/nix-archiver/modules/nix-archiver.nix ];
+  # services.nix-archiver.enable = true;
 }
 ```
+
+> **💡 Uwaga**: Konfiguracja `overrideAttrs` rozwiązuje problemy kompilacji związane z OpenSSL. Zobacz [INSTALL.md](INSTALL.md) dla szczegółów technicznych.
 
 Więcej metod (cargo, flakes, overlays, development): [INSTALL.md](INSTALL.md)
 
@@ -247,8 +262,10 @@ MIT
 ## 🔗 Linki
 
 ### Dokumentacja projektu
+- **[Quick Start](QUICK_START.md)** - 🚀 Gotowe konfiguracje (kopiuj-wklej)
 - **[Setup](SETUP.md)** - ⚠️ Przygotowanie przed pierwszym użyciem
 - **[Instalacja](INSTALL.md)** - Wszystkie metody instalacji
+- **[Troubleshooting](TROUBLESHOOTING.md)** - 🔧 Rozwiązywanie problemów
 - [Specyfikacja techniczna](spec.md) - Szczegółowa specyfikacja
 - [Roadmap i plany rozwoju](ROADMAP.md) - Plan integracji systemowej
 - [Moduł NixOS](modules/README.md) - Dokumentacja modułu
