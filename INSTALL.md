@@ -6,10 +6,10 @@ Ten dokument opisuje wszystkie metody instalacji nix-archiver - od szybkiego sta
 
 ```bash
 # Dla użytkowników Nix z Flakes
-nix profile install github:TWOJ_USERNAME/nix-archiver
+nix profile install github:DemwE/nix-archiver
 
 # Dla użytkowników bez Nix
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 cargo install --path crates/archiver-cli
 ```
@@ -22,10 +22,10 @@ cargo install --path crates/archiver-cli
 
 ```bash
 # Zainstaluj bezpośrednio z GitHub
-nix profile install github:TWOJ_USERNAME/nix-archiver
+nix profile install github:DemwE/nix-archiver
 
 # Użyj bez instalacji
-nix run github:TWOJ_USERNAME/nix-archiver -- search nodejs
+nix run github:DemwE/nix-archiver -- search nodejs
 
 # Weryfikuj
 nix-archiver --version
@@ -35,7 +35,7 @@ nix-archiver --version
 
 ```bash
 # Sklonuj repo
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj
@@ -51,7 +51,7 @@ nix shell . -c nix-archiver --help
 
 ```bash
 # Sklonuj repozytorium
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj przez nix-env
@@ -170,7 +170,7 @@ Dla systemów używających flakes (`/etc/nixos/flake.nix`):
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nix-archiver.url = "github:TWOJ_USERNAME/nix-archiver";
+    nix-archiver.url = "github:DemwE/nix-archiver";
   };
 
   outputs = { self, nixpkgs, nix-archiver }: {
@@ -254,7 +254,7 @@ brew install pkg-config openssl git
 
 ```bash
 # Sklonuj repozytorium
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 
 # Instaluj przez cargo (do ~/.cargo/bin)
@@ -284,7 +284,7 @@ Dla kontrybutorów i developerów.
 ### Z Nix (zalecane)
 
 ```bash
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 
 # Wejdź do dev shell
@@ -302,7 +302,7 @@ cargo run --bin nix-archiver -- --help
 ### Bez Nix
 
 ```bash
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 
 # Zainstaluj Rust (jeśli nie masz)
@@ -351,7 +351,7 @@ nix-archiver help stats
 nix profile remove nix-archiver
 
 # Zainstaluj nową
-nix profile install github:TWOJ_USERNAME/nix-archiver
+nix profile install github:DemwE/nix-archiver
 
 # Lub update (jeśli zainstalowane z GitHub)
 nix profile upgrade '.*nix-archiver.*'

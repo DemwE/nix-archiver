@@ -1,5 +1,7 @@
 # Nix-Archiver 🚀
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Deklaratywne przypisywanie pakietów do konkretnych wersji historycznych w ekosystemie NixOS.
 
 ## 📋 Opis projektu
@@ -69,15 +71,15 @@ Interfejs CLI.
 **Metoda 1: Nix (zalecane)**
 ```bash
 # Zainstaluj system-wide używając nix profile
-nix profile install github:TWOJ_USERNAME/nix-archiver
+nix profile install github:DemwE/nix-archiver
 
 # Lub użyj bezpośrednio bez instalacji
-nix run github:TWOJ_USERNAME/nix-archiver -- --help
+nix run github:DemwE/nix-archiver -- --help
 ```
 
 **Metoda 2: Z lokalnego repo**
 ```bash
-git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
 nix profile install .     # z Nix
 # LUB

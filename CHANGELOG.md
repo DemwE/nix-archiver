@@ -176,5 +176,5 @@ examples/nixos/
 - 4-crate workspace architecture
 - Nix flake for reproducible builds
 
-[Unreleased]: https://github.com/user/nix-archiver/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/user/nix-archiver/releases/tag/v0.1.0
+[Unreleased]: https://github.com/DemwE/nix-archiver/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/DemwE/nix-archiver/releases/tag/v0.1.0
