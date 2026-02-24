@@ -30,7 +30,7 @@ rustPlatform.buildRustPackage rec {
 
   meta = with lib; {
     description = "Declarative pinning of packages to historical versions in Nixpkgs";
-    homepage = "https://github.com/yourusername/nix-archiver";
+    homepage = "https://github.com/DemwE/nix-archiver";
     license = licenses.mit;
     maintainers = [];
     mainProgram = "nix-archiver";

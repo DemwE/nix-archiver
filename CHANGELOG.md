@@ -53,6 +53,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Troubleshooting guide
   - Performance tuning recommendations
   - Security considerations
+- **Installation Guide** (`INSTALL.md`)
+  - 7 installation methods (Nix profile, nix-env, NixOS, flakes, overlays, cargo, development)
+  - Platform-specific instructions (Ubuntu, Fedora, Arch, macOS)
+  - Troubleshooting common installation issues
+  - Update and uninstall procedures
+  - Verification steps
+- **Testing Guide** (`TESTING.md`)
+  - NixOS VM testing instructions
+  - Manual testing checklist
+  - Automated test framework examples
+  - Common issues and solutions
 - **Example Configurations** (`examples/nixos/`)
   - `minimal.nix` - Simplest possible setup
   - `configuration.nix` - Recommended for most users
@@ -62,8 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Project Documentation Updates
 - Updated main `README.md` with NixOS Module section
+- Reorganized README with dedicated sections and links
 - Updated `ROADMAP.md` with Level 1 completion status
 - Phase 11 tasks marked as in-progress
+- Added comprehensive documentation cross-references
 
 ### Technical Details
 

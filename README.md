@@ -10,6 +10,26 @@ Nix-Archiver to modularne narzędzie w Rust, które rozwiązuje problem "brakuj�
 - Generowanie odtwarzalnych wyrażeń Nix dla konkretnych wersji
 - Deduplikację danych (tylko najnowszy commit dla każdej wersji)
 
+## ⚡ Quickstart
+
+```bash
+# Najszybszy start - użyj bezpośrednio z GitHub (wymaga nix flakes)
+nix run github:DemwE/nix-archiver -- --help
+
+# Lub zainstaluj lokalnie
+git clone https://github.com/DemwE/nix-archiver.git
+cd nix-archiver
+nix profile install .
+
+# Podstawowe użycie
+nix-archiver search nodejs           # Znajdź wersje pakietu
+nix-archiver stats                   # Pokaż statystyki bazy
+```
+
+📖 **Szczegółowe instrukcje instalacji**: Zobacz [INSTALL.md](INSTALL.md) dla wszystkich metod instalacji.
+
+Dla pełnej integracji z NixOS, zobacz sekcję [Użycie - NixOS Module](#opcja-1-nixos-module-zalecane-dla-użytkowników-nixos).
+
 ## 🏗️ Architektura
 
 Projekt składa się z czterech crate'ów:
@@ -38,36 +58,48 @@ Interfejs CLI.
 - Fuzzy matching do sugestii wersji
 - (TODO) Generowanie pliku `frozen.nix`
 
-## 🚀 Quickstart
+## 🚀 Instalacja
 
-### Środowisko Nix (zalecane)
+📋 **Pełna dokumentacja**: [INSTALL.md](INSTALL.md) - wszystkie metody instalacji, troubleshooting, aktualizacja i deinstalacja.
 
+### Szybka instalacja
+
+**Metoda 1: Nix (zalecane)**
 ```bash
-# Wejdź do środowiska deweloperskiego
-nix develop --extra-experimental-features 'nix-command flakes'
+# Zainstaluj system-wide używając nix profile
+nix profile install github:TWOJ_USERNAME/nix-archiver
 
-# Zbuduj projekt
-cargo build --release
-
-# Uruchom testy
-cargo test --workspace
-
-# Wyświetl pomoc
-cargo run --bin nix-archiver -- --help
+# Lub użyj bezpośrednio bez instalacji
+nix run github:TWOJ_USERNAME/nix-archiver -- --help
 ```
 
-### Tradycyjne środowisko Rust
-
+**Metoda 2: Z lokalnego repo**
 ```bash
-# Wymagane zależności systemowe (Ubuntu/Debian)
-sudo apt install pkg-config libssl-dev
-
-# Build
-cargo build --release
-
-# Testy
-cargo test
+git clone https://github.com/TWOJ_USERNAME/nix-archiver.git
+cd nix-archiver
+nix profile install .     # z Nix
+# LUB
+cargo install --path crates/archiver-cli  # z Cargo
 ```
+
+**Metoda 3: NixOS system-wide**
+```nix
+# /etc/nixos/configuration.nix
+{ config, pkgs, ... }:
+
+{
+  # Prosty pakiet
+  environment.systemPackages = [ 
+    (pkgs.callPackage /path/to/nix-archiver/default.nix {})
+  ];
+  
+  # LUB pełny moduł z auto-indeksowaniem (zalecane)
+  imports = [ /path/to/nix-archiver/modules/nix-archiver.nix ];
+  services.nix-archiver.enable = true;
+}
+```
+
+Więcej metod (cargo, flakes, overlays, development): [INSTALL.md](INSTALL.md)
 
 ## 📖 Użycie
 
@@ -214,7 +246,18 @@ MIT
 
 ## 🔗 Linki
 
-- [Specyfikacja techniczna](spec.md)
-- [Roadmap i plany rozwoju](ROADMAP.md)
+### Dokumentacja projektu
+- **[Setup](SETUP.md)** - ⚠️ Przygotowanie przed pierwszym użyciem
+- **[Instalacja](INSTALL.md)** - Wszystkie metody instalacji
+- [Specyfikacja techniczna](spec.md) - Szczegółowa specyfikacja
+- [Roadmap i plany rozwoju](ROADMAP.md) - Plan integracji systemowej
+- [Moduł NixOS](modules/README.md) - Dokumentacja modułu
+- [Przykłady NixOS](examples/nixos/) - Przykładowe konfiguracje
+- [Testowanie](TESTING.md) - Instrukcje testowania
+- [Changelog](CHANGELOG.md) - Historia zmian
+- [Performance](PERFORMANCE.md) - Optymalizacja wydajności
+- [Logging](LOGGING.md) - Konfiguracja logowania
+
+### Zewnętrzne
 - [NixOS](https://nixos.org)
 - [Nixpkgs](https://github.com/NixOS/nixpkgs)
