@@ -289,6 +289,8 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 ---
 
 ## 6. Implementation Roadmap
+
+**Completed Phases**:
 - [x] **Phase 1**: Models in `archiver-core` and NAR hashing validation setup.
 - [x] **Phase 2**: Integration of `archiver-db` with Sled and deduplication logic.
 - [x] **Phase 3**: Git walker in `archiver-index` using `git2-rs`.
@@ -301,7 +303,15 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 - [x] **Phase 7**: Parallel processing with Rayon for multi-core utilization.
 - [x] **Phase 8a**: Comprehensive logging system with progress tracking and statistics.
 - [x] **Phase 8b**: Resumable indexing with atomic commit tracking.
-- [ ] **Phase 9 (Future)**: Cloud API (Axum), PostgreSQL migration, Next.js frontend.
+
+**Upcoming Phases**:
+- [ ] **Phase 10**: Core system integration (lock files, apply/sync commands, format converters)
+- [ ] **Phase 11**: NixOS module implementation
+- [ ] **Phase 12**: Flake library and outputs
+- [ ] **Phase 13**: Home Manager integration
+- [ ] **Phase 14+**: Cloud API, web dashboard, advanced features
+
+**Note**: For detailed roadmap including system integration, NixOS modules, flake support, and long-term vision, see [ROADMAP.md](ROADMAP.md).
 
 ---
 

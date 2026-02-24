@@ -142,14 +142,17 @@ cargo clippy --workspace -- -D warnings
 
 ## 📝 Roadmap
 
-- [x] **Phase 1**: Modele w `archiver-core` i walidacja hashowania NAR
-- [x] **Phase 2**: Integracja `archiver-db` ze Sledem i logiką deduplikacji
-- [x] **Phase 3**: Walker Git w `archiver-index`
-- [x] **Phase 4**: CLI z obsługą błędów
-- [ ] **Phase 5**: Generowanie plików `frozen.nix`
-- [ ] **Phase 6**: Hashowanie NAR bez zależności binarnej Nix
-- [ ] **Phase 7**: Cloud API (Axum), PostgreSQL backend
-- [ ] **Phase 8**: Frontend w Next.js
+**Ukończone Fazy** (1-8b): ✅
+- Models, database, Git indexer, CLI, NAR hashing, table formatting, parallel processing, logging, resumability
+
+**Następne Kroki**:
+- [ ] **Phase 10**: Lock files, apply/sync commands, format converters
+- [ ] **Phase 11**: NixOS module
+- [ ] **Phase 12**: Flake library & outputs
+- [ ] **Phase 13**: Home Manager integration
+- [ ] **Phase 14+**: Cloud API, web dashboard, advanced features
+
+📋 **Szczegółowa roadmapa**: Zobacz [ROADMAP.md](ROADMAP.md) dla pełnego planu integracji systemowej, NixOS modules, flake support, i długoterminowej wizji projektu.
 
 ## 🤝 Wkład
 
@@ -162,5 +165,6 @@ MIT
 ## 🔗 Linki
 
 - [Specyfikacja techniczna](spec.md)
+- [Roadmap i plany rozwoju](ROADMAP.md)
 - [NixOS](https://nixos.org)
 - [Nixpkgs](https://github.com/NixOS/nixpkgs)
