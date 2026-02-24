@@ -10,9 +10,10 @@ pub(crate) fn extract_package_info_static(
     version_regex: &Regex,
     nar_hash: Option<String>,
 ) -> Option<PackageInfo> {
-    // Extract attribute name from path
-    // e.g., "pkgs/development/libraries/nodejs/default.nix" -> "nodejs"
-    let attr_name = extract_attr_name(path)?;
+    // Try to extract pname from file content first
+    // This is more accurate than path-based extraction
+    let attr_name = extract_pname_from_content(content)
+        .or_else(|| extract_attr_name(path))?;
 
     // Extract version using regex
     let version = version_regex
@@ -53,6 +54,18 @@ pub(crate) fn is_valid_version(version: &str) -> bool {
     version.chars().all(|c| {
         c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == '+'
     })
+}
+
+/// Extracts pname from Nix file content
+/// Looks for patterns like: pname = "package-name";
+fn extract_pname_from_content(content: &str) -> Option<String> {
+    // Match: pname = "name"; or pname = "name"
+    let pname_regex = Regex::new(r#"pname\s*=\s*"([^"]+)"#).ok()?;
+    
+    pname_regex
+        .captures(content)
+        .and_then(|cap| cap.get(1))
+        .map(|m| m.as_str().to_string())
 }
 
 /// Extracts attribute name from file path

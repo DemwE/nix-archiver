@@ -21,7 +21,7 @@ pub use stats::IndexStats;
 mod tests {
     use regex::Regex;
     use crate::nar::compute_nar_hash_for_blob;
-    use crate::parsers::is_valid_version;
+    use crate::parsers::{is_valid_version, extract_package_info_static};
 
     #[test]
     fn test_version_regex() {
@@ -34,6 +34,47 @@ mod tests {
         
         let caps = indexer_regex.captures(content).unwrap();
         assert_eq!(caps.get(1).unwrap().as_str(), "14.17.0");
+    }
+
+    #[test]
+    fn test_pname_extraction() {
+        let version_regex = Regex::new(r#"version\s*=\s*"([^"]+)""#).unwrap();
+        
+        // Test pname extraction from content
+        let content = r#"
+            pname = "gitlab.vim";
+            version = "0.1.1";
+        "#;
+        
+        let info = extract_package_info_static(
+            "pkgs/applications/editors/vim/plugins/gitlab-vim/default.nix",
+            content,
+            &version_regex,
+            None,
+        ).unwrap();
+        
+        assert_eq!(info.attr_name, "gitlab.vim");
+        assert_eq!(info.version, "0.1.1");
+    }
+
+    #[test]
+    fn test_fallback_to_path() {
+        let version_regex = Regex::new(r#"version\s*=\s*"([^"]+)""#).unwrap();
+        
+        // Test fallback to path when no pname
+        let content = r#"
+            version = "1.0.0";
+        "#;
+        
+        let info = extract_package_info_static(
+            "pkgs/development/libraries/mylib/default.nix",
+            content,
+            &version_regex,
+            None,
+        ).unwrap();
+        
+        assert_eq!(info.attr_name, "mylib");
+        assert_eq!(info.version, "1.0.0");
     }
 
     #[test]
