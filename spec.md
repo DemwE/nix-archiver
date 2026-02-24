@@ -155,7 +155,33 @@ members = [
             nix-archiver search nodejs -m 14 -n 20
             ```
     - `stats` - Display database statistics with colored output
-    - `generate` - Generate `frozen.nix` file (TODO)
+    - `generate` - Generate `frozen.nix` file from package specification
+        - **Input Format**: Nix attribute set with package versions
+            ```nix
+            {
+              nodejs = "20.11.0";
+              python = "3.11.7";
+              go = "1.21.5";
+            }
+            ```
+        - **Output**: frozen.nix with fetchTarball expressions for each package
+        - **Validation**: Checks if versions exist in database, suggests alternatives
+        - **Example Usage**:
+            ```bash
+            # Create package specification
+            cat > packages.nix << EOF
+            {
+              nodejs = "20.11.0";
+              go = "1.21.5";
+            }
+            EOF
+            
+            # Generate frozen.nix
+            nix-archiver generate -i packages.nix -o frozen.nix
+            
+            # Use in your project
+            nix-shell frozen.nix
+            ```
 - **Features**:
     - **Semantic Version Sorting**: Proper parsing and comparison of semver versions
     - **Advanced Filtering**: Multiple filter types (major version, regex, date)
@@ -180,7 +206,7 @@ members = [
     - `regex` (pattern filtering)
     - `chrono` (date/time handling)
     - `strsim` (fuzzy matching)
-- **Status**: ✅ CLI implemented with enhanced display, filtering, and sorting; `generate` command pending
+- **Status**: ✅ CLI fully implemented with enhanced display, filtering, sorting, and generate command
 
 ---
 
@@ -270,11 +296,11 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 - [x] **Phase 5a**: Version validation and filtering (Nix code detection).
 - [x] **Phase 5b**: Complete NAR hashing implementation (Nix-independent).
 - [x] **Phase 6a**: Enhanced search output with table formatting.
+- [x] **Phase 6b**: `generate` command for `frozen.nix` file creation.
 - [x] **Phase 6c**: Advanced CLI enhancements (semantic sorting, filtering, colors, statistics).
 - [x] **Phase 7**: Parallel processing with Rayon for multi-core utilization.
 - [x] **Phase 8a**: Comprehensive logging system with progress tracking and statistics.
 - [x] **Phase 8b**: Resumable indexing with atomic commit tracking.
-- [ ] **Phase 6b**: `generate` command for `frozen.nix` file creation.
 - [ ] **Phase 9 (Future)**: Cloud API (Axum), PostgreSQL migration, Next.js frontend.
 
 ---
