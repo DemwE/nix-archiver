@@ -71,7 +71,49 @@ cargo test
 
 ## 📖 Użycie
 
-### Indeksowanie repozytorium Nixpkgs
+### Opcja 1: NixOS Module (zalecane dla użytkowników NixOS)
+
+Dodaj moduł do swojej konfiguracji `/etc/nixos/configuration.nix`:
+
+```nix
+{ config, pkgs, ... }:
+
+{
+  imports = [
+    /path/to/nix-archiver/modules/nix-archiver.nix
+  ];
+
+  services.nix-archiver = {
+    enable = true;
+    
+    # Automatyczne indeksowanie
+    indexer = {
+      enable = true;
+      updateInterval = "daily";
+    };
+    
+    # Pinuj konkretne wersje pakietów
+    pinnedPackages = {
+      nodejs = "20.11.0";
+      python3 = "3.11.7";
+      postgresql = "15.5";
+    };
+  };
+
+  # Użyj przypięte wersje
+  environment.systemPackages = with pkgs; [
+    nodejs      # wersja 20.11.0
+    python3     # wersja 3.11.7
+    postgresql  # wersja 15.5
+  ];
+}
+```
+
+Pełna dokumentacja modułu: [modules/README.md](modules/README.md)
+
+### Opcja 2: Tradycyjne CLI
+
+#### Indeksowanie repozytorium Nixpkgs
 
 ```bash
 # Sklonuj Nixpkgs (jeśli jeszcze nie masz)
@@ -84,7 +126,7 @@ nix-archiver index \
   --max-commits 1000
 ```
 
-### Wyszukiwanie wersji pakietu
+#### Wyszukiwanie wersji pakietu
 
 ```bash
 # Pokaż wszystkie wersje nodejs
@@ -94,7 +136,14 @@ nix-archiver search nodejs
 nix-archiver search nodejs 14.17.0
 ```
 
-### Wyświetlanie statystyk
+#### Generowanie packages.nix
+
+```bash
+# Wygeneruj plik z pinowanymi pakietami
+nix-archiver generate -o packages.nix
+```
+
+#### Wyświetlanie statystyk
 
 ```bash
 nix-archiver stats
@@ -145,9 +194,10 @@ cargo clippy --workspace -- -D warnings
 **Ukończone Fazy** (1-8b): ✅
 - Models, database, Git indexer, CLI, NAR hashing, table formatting, parallel processing, logging, resumability
 
-**Następne Kroki**:
+**Phase 10-11** (W realizacji): 🔄
+- ✅ **Level 1**: NixOS Module - deklaratywne pinowanie pakietów, automatyczne indeksowanie przez systemd
 - [ ] **Phase 10**: Lock files, apply/sync commands, format converters
-- [ ] **Phase 11**: NixOS module
+- [ ] **Phase 11**: Pełna integracja NixOS module (testy, dokumentacja)
 - [ ] **Phase 12**: Flake library & outputs
 - [ ] **Phase 13**: Home Manager integration
 - [ ] **Phase 14+**: Cloud API, web dashboard, advanced features
