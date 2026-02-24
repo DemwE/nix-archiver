@@ -1,9 +1,9 @@
-//! Nix-Archiver CLI - Interfejs użytkownika dla systemu archiwizacji Nixpkgs
+//! Nix-Archiver CLI - User interface for Nixpkgs archiving system
 //!
-//! Umożliwia:
-//! - Indeksowanie repozytorium Nixpkgs
-//! - Wyszukiwanie konkretnych wersji pakietów
-//! - Generowanie plików frozen.nix z pinned wersjami
+//! Provides:
+//! - Indexing of Nixpkgs repository
+//! - Searching for specific package versions
+//! - Generating frozen.nix files with pinned versions
 
 use anyhow::{Context, Result};
 use archiver_db::ArchiverDb;
@@ -13,14 +13,14 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "nix-archiver")]
-#[command(about = "Deklaratywne przypisywanie pakietów do wersji historycznych w Nixpkgs", long_about = None)]
+#[command(about = "Declarative pinning of packages to historical versions in Nixpkgs", long_about = None)]
 #[command(version)]
 struct Cli {
-    /// Ścieżka do bazy danych
+    /// Path to the database
     #[arg(short, long, default_value = "./nix-archiver.db")]
     database: PathBuf,
 
-    /// Poziom logowania (error, warn, info, debug, trace)
+    /// Logging level (error, warn, info, debug, trace)
     #[arg(short, long, default_value = "info")]
     log_level: String,
 
@@ -30,54 +30,54 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Indeksuje repozytorium Nixpkgs
+    /// Indexes Nixpkgs repository
     Index {
-        /// Ścieżka do lokalnego repozytorium Nixpkgs
+        /// Path to local Nixpkgs repository
         #[arg(short, long)]
         repo: PathBuf,
 
-        /// Commit od którego zacząć indeksowanie (domyślnie HEAD)
+        /// Commit to start indexing from (default: HEAD)
         #[arg(short, long, default_value = "HEAD")]
         from: String,
 
-        /// Maksymalna liczba commitów do przetworzenia
+        /// Maximum number of commits to process
         #[arg(short, long)]
         max_commits: Option<usize>,
     },
 
-    /// Wyszukuje konkretną wersję pakietu
+    /// Searches for a specific package version
     Search {
-        /// Nazwa atrybutu pakietu (np. "nodejs")
+        /// Package attribute name (e.g., "nodejs")
         attr_name: String,
 
-        /// Wersja do wyszukania (opcjonalna - wyświetli wszystkie wersje)
+        /// Version to search for (optional - displays all versions)
         version: Option<String>,
     },
 
-    /// Generuje plik frozen.nix na podstawie specyfikacji
+    /// Generates frozen.nix file based on specification
     Generate {
-        /// Plik wejściowy ze specyfikacją wersji
+        /// Input file with version specification
         #[arg(short, long)]
         input: PathBuf,
 
-        /// Plik wyjściowy frozen.nix
+        /// Output frozen.nix file
         #[arg(short, long)]
         output: PathBuf,
     },
 
-    /// Wyświetla statystyki bazy danych
+    /// Displays database statistics
     Stats,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Konfiguracja loggera
+    // Configure logger
     env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or(&cli.log_level)
     ).init();
 
-    // Otwórz bazę danych
+    // Open database
     let db = ArchiverDb::open(&cli.database)
         .with_context(|| format!("Failed to open database at {:?}", cli.database))?;
 
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Indeksuje repozytorium Nixpkgs
+/// Indexes Nixpkgs repository
 fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>, db: ArchiverDb) -> Result<()> {
     log::info!("Starting indexing of repository at {:?}", repo_path);
     log::info!("From commit: {}", from_commit);
@@ -110,7 +110,7 @@ fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>
     let indexer = Indexer::new(&repo_path, db)
         .context("Failed to create indexer")?;
 
-    // Jeśli from_commit to "HEAD", rozwiąż do konkretnego SHA
+    // If from_commit is "HEAD", resolve to concrete SHA
     let commit_sha = if from_commit == "HEAD" {
         resolve_head(&repo_path)?
     } else {
@@ -126,7 +126,7 @@ fn cmd_index(repo_path: PathBuf, from_commit: String, max_commits: Option<usize>
     Ok(())
 }
 
-/// Rozwiązuje HEAD do konkretnego commit SHA
+/// Resolves HEAD to concrete commit SHA
 fn resolve_head(repo_path: &PathBuf) -> Result<String> {
     use git2::Repository;
     let repo = Repository::open(repo_path)?;
@@ -135,10 +135,10 @@ fn resolve_head(repo_path: &PathBuf) -> Result<String> {
     Ok(commit.id().to_string())
 }
 
-/// Wyszukuje pakiet w bazie danych
+/// Searches for package in database
 fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Result<()> {
     if let Some(ver) = version {
-        // Wyszukaj konkretną wersję
+        // Search for specific version
         match db.get(&attr_name, &ver)? {
             Some(entry) => {
                 println!("Found: {}", entry);
@@ -148,7 +148,7 @@ fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Res
             None => {
                 eprintln!("Package {}:{} not found in database", attr_name, ver);
                 
-                // Zasugeruj dostępne wersje
+                // Suggest available versions
                 let all_versions = db.get_all_versions(&attr_name)?;
                 if !all_versions.is_empty() {
                     eprintln!("\nAvailable versions for {}:", attr_name);
@@ -166,7 +166,7 @@ fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Res
             }
         }
     } else {
-        // Wyświetl wszystkie wersje
+        // Display all versions
         let all_versions = db.get_all_versions(&attr_name)?;
         
         if all_versions.is_empty() {
@@ -186,15 +186,15 @@ fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Res
     Ok(())
 }
 
-/// Generuje plik frozen.nix
+/// Generates frozen.nix file
 fn cmd_generate(_input: PathBuf, _output: PathBuf, _db: ArchiverDb) -> Result<()> {
-    // TODO: Implementacja parsowania pliku wejściowego i generowania frozen.nix
+    // TODO: Implementation of input file parsing and frozen.nix generation
     eprintln!("Generate command not yet implemented");
     eprintln!("This will be implemented in Phase 4");
     std::process::exit(1);
 }
 
-/// Wyświetla statystyki bazy danych
+/// Displays database statistics
 fn cmd_stats(db: ArchiverDb) -> Result<()> {
     println!("Database Statistics:");
     println!("  Packages: {}", db.package_count());
@@ -202,11 +202,11 @@ fn cmd_stats(db: ArchiverDb) -> Result<()> {
     Ok(())
 }
 
-/// Formatuje timestamp Unix na czytelną datę
+/// Formats Unix timestamp to readable date
 fn format_timestamp(timestamp: u64) -> String {
     use std::time::{Duration, UNIX_EPOCH};
     let datetime = UNIX_EPOCH + Duration::from_secs(timestamp);
-    // Proste formatowanie - w produkcji użyć biblioteki chrono
+    // Simple formatting - in production use chrono library
     format!("{:?}", datetime)
 }
 
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_cli_parsing() {
-        // Test czy CLI się poprawnie parsuje
+        // Test that CLI parses correctly
         let cli = Cli::try_parse_from(&[
             "nix-archiver",
             "--database", "./test.db",

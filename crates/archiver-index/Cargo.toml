@@ -14,7 +14,5 @@ sha2 = { workspace = true }
 data-encoding = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-
-# Dla parsowania plików Nix i wersji
-regex = "1.10"
+regex = { workspace = true }
 semver = { workspace = true }

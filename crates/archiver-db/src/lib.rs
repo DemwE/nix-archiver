@@ -1,27 +1,27 @@
-//! Archiver DB - Warstwa persistency z deduplikacją
+//! Archiver DB - Persistence layer with deduplication
 //!
-//! Ten crate zarządza lokalną bazą danych Sled, implementując logikę deduplikacji:
-//! dla każdej unikalnej wersji pakietu przechowywany jest tylko najnowszy commit.
+//! This crate manages the local Sled database, implementing deduplication logic:
+//! for each unique package version, only the latest commit is stored.
 
 use archiver_core::PackageEntry;
 use anyhow::{Context, Result};
 use sled::Db;
 use std::path::Path;
 
-/// Główna struktura zarządzająca bazą danych
+/// Main structure managing the database
 pub struct ArchiverDb {
-    /// Drzewo przechowujące wpisy pakietów (klucz: "attr_name:version")
+    /// Tree storing package entries (key: "attr_name:version")
     packages: sled::Tree,
     
-    /// Drzewo śledzące przetworzone commity
+    /// Tree tracking processed commits
     processed_commits: sled::Tree,
     
-    /// Instancja bazy Sled
+    /// Sled database instance
     db: Db,
 }
 
 impl ArchiverDb {
-    /// Otwiera lub tworzy nową bazę danych w podanej lokalizacji
+    /// Opens or creates a new database at the specified location
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let db = sled::open(path.as_ref())
             .with_context(|| format!("Failed to open database at {:?}", path.as_ref()))?;
@@ -41,10 +41,10 @@ impl ArchiverDb {
         })
     }
 
-    /// Wstawia wpis pakietu tylko jeśli jest nowszy niż istniejący
+    /// Inserts package entry only if it's newer than existing one
     ///
-    /// Logika deduplikacji: jeśli wpis dla danej wersji już istnieje,
-    /// zastępowany jest tylko wtedy, gdy nowy wpis ma nowszy timestamp.
+    /// Deduplication logic: if an entry for the given version already exists,
+    /// it is replaced only when the new entry has a newer timestamp.
     pub fn insert_if_better(&self, entry: &PackageEntry) -> Result<bool> {
         let key = entry.key();
         let new_value = serde_json::to_vec(entry)
@@ -53,15 +53,15 @@ impl ArchiverDb {
         let was_inserted = self.packages.update_and_fetch(key.as_bytes(), |old_value| {
             match old_value {
                 None => {
-                    // Brak istniejącej wartości - wstawiamy
+                    // No existing value - insert
                     Some(new_value.clone())
                 }
                 Some(old_bytes) => {
-                    // Sprawdzamy timestamp istniejącej wartości
+                    // Check timestamp of existing value
                     match serde_json::from_slice::<PackageEntry>(old_bytes) {
                         Ok(old_entry) => {
                             if entry.timestamp > old_entry.timestamp {
-                                // Nowy wpis jest nowszy - nadpisujemy
+                                // New entry is newer - overwrite
                                 log::info!(
                                     "Updating {} from commit {} -> {} (newer timestamp)",
                                     key,
@@ -70,12 +70,12 @@ impl ArchiverDb {
                                 );
                                 Some(new_value.clone())
                             } else {
-                                // Stary wpis jest nowszy - zostawiamy bez zmian
+                                // Old entry is newer - keep unchanged
                                 Some(old_bytes.to_vec())
                             }
                         }
                         Err(_) => {
-                            // Błąd deserializacji - nadpisujemy z ostrzeżeniem
+                            // Deserialization error - overwrite with warning
                             log::warn!("Corrupted entry for {}, overwriting", key);
                             Some(new_value.clone())
                         }
@@ -85,7 +85,7 @@ impl ArchiverDb {
         })
         .context("Failed to update package entry")?;
 
-        // Sprawdzamy czy faktycznie wstawiliśmy nowy wpis
+        // Check if we actually inserted a new entry
         if let Some(final_value) = was_inserted {
             let final_entry: PackageEntry = serde_json::from_slice(&final_value)
                 .context("Failed to deserialize final entry")?;
@@ -95,7 +95,7 @@ impl ArchiverDb {
         }
     }
 
-    /// Pobiera wpis pakietu według nazwy atrybutu i wersji
+    /// Retrieves a package entry by attribute name and version
     pub fn get(&self, attr_name: &str, version: &str) -> Result<Option<PackageEntry>> {
         let key = format!("{}:{}", attr_name, version);
         
@@ -109,7 +109,7 @@ impl ArchiverDb {
         }
     }
 
-    /// Pobiera wszystkie wersje danego pakietu
+    /// Retrieves all versions of a given package
     pub fn get_all_versions(&self, attr_name: &str) -> Result<Vec<PackageEntry>> {
         let prefix = format!("{}:", attr_name);
         let mut results = Vec::new();
@@ -121,12 +121,12 @@ impl ArchiverDb {
             results.push(entry);
         }
 
-        // Sortujemy po timestampie (najnowsze najpierw)
+        // Sort by timestamp (newest first)
         results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         Ok(results)
     }
 
-    /// Zaznacza commit jako przetworzony
+    /// Marks a commit as processed
     pub fn mark_commit_processed(&self, commit_sha: &str, timestamp: u64) -> Result<()> {
         self.processed_commits
             .insert(commit_sha.as_bytes(), &timestamp.to_le_bytes())
@@ -134,22 +134,22 @@ impl ArchiverDb {
         Ok(())
     }
 
-    /// Sprawdza czy commit został już przetworzony
+    /// Checks if a commit has already been processed
     pub fn is_commit_processed(&self, commit_sha: &str) -> Result<bool> {
         Ok(self.processed_commits.contains_key(commit_sha.as_bytes())?)
     }
 
-    /// Zwraca liczbę przechowywanych pakietów
+    /// Returns the number of stored packages
     pub fn package_count(&self) -> usize {
         self.packages.len()
     }
 
-    /// Zwraca liczbę przetworzonych commitów
+    /// Returns the number of processed commits
     pub fn processed_commit_count(&self) -> usize {
         self.processed_commits.len()
     }
 
-    /// Flush'uje wszystkie oczekujące operacje na dysk
+    /// Flushes all pending operations to disk
     pub fn flush(&self) -> Result<()> {
         self.db.flush().context("Failed to flush database")?;
         Ok(())

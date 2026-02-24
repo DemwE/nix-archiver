@@ -12,39 +12,39 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-# Wspólne modele i typy
+# Shared models and types
 archiver-core = { path = "crates/archiver-core" }
 archiver-db = { path = "crates/archiver-db" }
 archiver-index = { path = "crates/archiver-index" }
 
-# Serializacja
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 
-# Asynchroniczność
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
+# Async runtime
+tokio = { version = "1.49.0", features = ["full"] }
+async-trait = "0.1.89"
 
-# Obsługa błędów i logi
-anyhow = "1.0"
-thiserror = "1.0"
+# Error handling and logging
+anyhow = "1.0.102"
+thiserror = "2.0.18"
 log = "0.4"
-env_logger = "0.11"
+env_logger = "0.11.9"
 
-# Baza danych i Git
-sled = "0.34"
-git2 = { version = "0.18", features = ["vendored-openssl", "vendored-libgit2"] }
+# Database and Git
+sled = "0.34.7"
+git2 = { version = "0.20.4", features = ["vendored-openssl", "vendored-libgit2"] }
 
-# Kryptografia i Nix-specyficzne
-sha2 = "0.10"
-data-encoding = "2.5" # Do Base32 (Nix style)
-nix-nar = "0.2"
-semver = "1.0"
+# Cryptography and Nix-specific
+sha2 = "0.10.9"
+data-encoding = "2.10.0" # For Base32 (Nix style)
+nix-nar = "0.3.1"
+semver = "1.0.27"
 
 # CLI
-clap = { version = "4.5", features = ["derive"] }
-strsim = "0.11"
+clap = { version = "4.5.60", features = ["derive"] }
+strsim = "0.11.1"
 
 # Testing
-tempfile = "3.10"
-regex = "1.10"
+tempfile = "3.26.0"
+regex = "1.12.3"

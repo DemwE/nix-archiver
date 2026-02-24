@@ -1,38 +1,38 @@
-//! Archiver Core - Wspólne modele danych i logika generowania kodu Nix
+//! Archiver Core - Shared data models and Nix code generation logic
 //!
-//! Ten crate definiuje podstawowe struktury danych używane w całym projekcie,
-//! w tym `PackageEntry` oraz funkcje do generowania wyrażeń Nix.
+//! This crate defines the core data structures used throughout the project,
+//! including `PackageEntry` and functions for generating Nix expressions.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Wpis pakietu w bazie danych
+/// Package entry in the database
 ///
-/// Reprezentuje konkretną wersję pakietu w konkretnym commicie Nixpkgs.
-/// Dla każdej unikalnej wersji przechowywany jest tylko najnowszy commit.
+/// Represents a specific package version in a specific Nixpkgs commit.
+/// For each unique version, only the latest commit is stored.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PackageEntry {
-    /// Nazwa atrybutu w Nixpkgs (np. "nodejs", "python3")
+    /// Attribute name in Nixpkgs (e.g., "nodejs", "python3")
     pub attr_name: String,
     
-    /// Wersja pakietu (np. "14.17.0")
+    /// Package version (e.g., "14.17.0")
     pub version: String,
     
-    /// SHA commita w Nixpkgs
+    /// Commit SHA in Nixpkgs
     pub commit_sha: String,
     
-    /// Hash NAR w formacie SRI (np. "sha256-...")
+    /// NAR hash in SRI format (e.g., "sha256-...")
     pub nar_hash: String,
     
-    /// Timestamp commita (Unix epoch)
+    /// Commit timestamp (Unix epoch)
     pub timestamp: u64,
     
-    /// Czy to jest główna/aktywna wersja
+    /// Whether this is the primary/active version
     pub is_primary: bool,
 }
 
 impl PackageEntry {
-    /// Tworzy nowy wpis pakietu
+    /// Creates a new package entry
     pub fn new(
         attr_name: String,
         version: String,
@@ -50,15 +50,15 @@ impl PackageEntry {
         }
     }
 
-    /// Generuje klucz do przechowywania w bazie danych
+    /// Generates a key for database storage
     /// Format: "attr_name:version"
     pub fn key(&self) -> String {
         format!("{}:{}", self.attr_name, self.version)
     }
 
-    /// Generuje blok `fetchTarball` w formacie Nix
+    /// Generates a `fetchTarball` block in Nix format
     ///
-    /// Przykład wyjścia:
+    /// Example output:
     /// ```nix
     /// fetchTarball {
     ///   url = "https://github.com/NixOS/nixpkgs/archive/abc123.tar.gz";
@@ -75,9 +75,9 @@ impl PackageEntry {
         )
     }
 
-    /// Generuje pełne wyrażenie Nix dla importu pakietu
+    /// Generates a complete Nix expression for package import
     ///
-    /// Przykład wyjścia:
+    /// Example output:
     /// ```nix
     /// let
     ///   pkgs = import (fetchTarball { ... }) {};
@@ -109,7 +109,7 @@ impl fmt::Display for PackageEntry {
     }
 }
 
-/// Błędy specyficzne dla archiver-core
+/// Errors specific to archiver-core
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error("Invalid package entry: {0}")]
