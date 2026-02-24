@@ -1,0 +1,16 @@
+[package]
+name = "archiver-db"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+archiver-core = { workspace = true }
+sled = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

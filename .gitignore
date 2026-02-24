@@ -1,0 +1,24 @@
+# Nix-specific
+result
+result-*
+
+# Rust
+/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Database
+*.db
+*.db-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env

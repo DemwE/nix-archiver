@@ -1,0 +1,20 @@
+[package]
+name = "archiver-index"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+archiver-core = { workspace = true }
+archiver-db = { workspace = true }
+git2 = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+sha2 = { workspace = true }
+data-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Dla parsowania plików Nix i wersji
+regex = "1.10"
+semver = { workspace = true }

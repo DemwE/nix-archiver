@@ -1,0 +1,24 @@
+[package]
+name = "archiver-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "nix-archiver"
+path = "src/main.rs"
+
+[dependencies]
+archiver-core = { workspace = true }
+archiver-db = { workspace = true }
+archiver-index = { workspace = true }
+git2 = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Fuzzy matching do sugestii wersji
+strsim = "0.11"
