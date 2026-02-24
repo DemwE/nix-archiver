@@ -9,8 +9,9 @@ use anyhow::{Context, Result};
 use archiver_db::ArchiverDb;
 use archiver_index::Indexer;
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 use std::path::PathBuf;
-use tabled::{Table, Tabled, settings::Style};
+use tabled::{Table, Tabled, settings::{Style, Color, Modify, object::Rows}};
 use chrono::{DateTime, Utc};
 
 #[derive(Parser)]
@@ -62,6 +63,26 @@ enum Commands {
 
         /// Version to search for (optional - displays all versions)
         version: Option<String>,
+        
+        /// Maximum number of versions to display (default: 50)
+        #[arg(short = 'n', long, default_value = "50")]
+        limit: usize,
+        
+        /// Filter by major version (e.g., 20 for 20.x.x)
+        #[arg(long)]
+        major: Option<u64>,
+        
+        /// Filter by regex pattern
+        #[arg(short = 'p', long)]
+        pattern: Option<String>,
+        
+        /// Show versions since date (YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        
+        /// Show all versions (ignore limit)
+        #[arg(short = 'a', long)]
+        all: bool,
     },
 
     /// Generates frozen.nix file based on specification
@@ -95,8 +116,8 @@ fn main() -> Result<()> {
         Commands::Index { repo, from, max_commits, threads, batch_size } => {
             cmd_index(repo, from, max_commits, threads, batch_size, db)?;
         }
-        Commands::Search { attr_name, version } => {
-            cmd_search(attr_name, version, db)?;
+        Commands::Search { attr_name, version, limit, major, pattern, since, all } => {
+            cmd_search(attr_name, version, limit, major, pattern, since, all, db)?;
         }
         Commands::Generate { input, output } => {
             cmd_generate(input, output, db)?;
@@ -170,80 +191,133 @@ struct VersionRow {
 }
 
 /// Searches for package in database
-fn cmd_search(attr_name: String, version: Option<String>, db: ArchiverDb) -> Result<()> {
+fn cmd_search(
+    attr_name: String,
+    version: Option<String>,
+    limit: usize,
+    major: Option<u64>,
+    pattern: Option<String>,
+    since: Option<String>,
+    show_all: bool,
+    db: ArchiverDb,
+) -> Result<()> {
     if let Some(ver) = version {
         // Search for specific version
         match db.get(&attr_name, &ver)? {
             Some(entry) => {
-                println!("\n📦 Package: {} v{}", attr_name, ver);
-                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                println!("  Commit:    {}", entry.commit_sha);
-                println!("  Date:      {}", format_timestamp(entry.timestamp));
-                println!("  NAR Hash:  {}", entry.nar_hash);
-                println!("\n📝 Nix expression:");
-                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                println!("{}", entry.to_nix_import());
+                println!("\n{} {}", "📦 Package:".bright_cyan(), format!("{} v{}", attr_name, ver).bold());
+                println!("{}", "━".repeat(60).bright_black());
+                println!("  {}    {}", "Commit:".bright_yellow(), entry.commit_sha);
+                println!("  {}      {}", "Date:".bright_yellow(), format_timestamp(entry.timestamp));
+                println!("  {}  {}", "NAR Hash:".bright_yellow(), entry.nar_hash);
+                println!("\n{}", "📝 Nix expression:".bright_cyan());
+                println!("{}", "━".repeat(60).bright_black());
+                println!("{}", entry.to_nix_import().bright_white());
             }
             None => {
-                eprintln!("❌ Package {}:{} not found in database", attr_name, ver);
+                eprintln!("{} Package {}:{} not found in database", "❌".red(), attr_name.bold(), ver.bold());
                 
                 // Suggest available versions
                 let all_versions = db.get_all_versions(&attr_name)?;
                 if !all_versions.is_empty() {
-                    eprintln!("\n💡 Available versions for {}:", attr_name);
-                    let rows: Vec<VersionRow> = all_versions.iter()
+                    eprintln!("\n{} Available versions for {}:", "💡".yellow(), attr_name.bold());
+                    let sorted = sort_versions_semver(all_versions);
+                    let rows: Vec<VersionRow> = sorted.iter()
                         .take(10)
                         .map(|entry| VersionRow {
                             version: entry.version.clone(),
-                            commit: entry.commit_sha[..12].to_string(),
-                            date: format_timestamp(entry.timestamp),
+                            commit: entry.commit_sha.clone(),
+                            date: format_relative_time(entry.timestamp),
                             nar_hash: if entry.nar_hash == "unknown" { 
-                                "-".to_string() 
+                                "-".to_string()
                             } else { 
-                                entry.nar_hash[..16].to_string() + "..." 
+                                entry.nar_hash.clone()
                             },
                         })
                         .collect();
                     
                     let mut table = Table::new(rows);
-                    table.with(Style::rounded());
+                    table.with(Style::rounded())
+                        .with(Modify::new(Rows::first()).with(Color::FG_BRIGHT_CYAN));
                     eprintln!("{}", table);
                     
-                    if all_versions.len() > 10 {
-                        eprintln!("\n  ... and {} more versions", all_versions.len() - 10);
+                    if sorted.len() > 10 {
+                        eprintln!("\n  {} and {} more versions", "...".dimmed(), (sorted.len() - 10).to_string().bold());
                     }
                 } else {
-                    eprintln!("\n❌ No versions found for package '{}'", attr_name);
+                    eprintln!("\n{} No versions found for package '{}'", "❌".red(), attr_name.bold());
                 }
                 
                 std::process::exit(1);
             }
         }
     } else {
-        // Display all versions
-        let all_versions = db.get_all_versions(&attr_name)?;
+        // Display all versions with filtering
+        let mut all_versions = db.get_all_versions(&attr_name)?;
         
         if all_versions.is_empty() {
-            println!("❌ No versions found for package '{}'", attr_name);
-        } else {
-            println!("\n📦 Found {} versions of '{}':\n", all_versions.len(), attr_name);
-            
-            let rows: Vec<VersionRow> = all_versions.iter()
-                .map(|entry| VersionRow {
-                    version: entry.version.clone(),
-                    commit: entry.commit_sha[..12].to_string(),
-                    date: format_timestamp(entry.timestamp),
-                    nar_hash: if entry.nar_hash == "unknown" { 
-                        "-".to_string() 
-                    } else { 
-                        entry.nar_hash[..16].to_string() + "..." 
-                    },
-                })
-                .collect();
-            
-            let mut table = Table::new(rows);
-            table.with(Style::rounded());
-            println!("{}", table);
+            println!("{} No versions found for package '{}'", "❌".red(), attr_name.bold());
+            return Ok(());
+        }
+        
+        // Apply filters
+        all_versions = filter_versions(all_versions, major, pattern.as_deref(), since.as_deref())?;
+        
+        if all_versions.is_empty() {
+            println!("{} No versions match the specified filters", "❌".red());
+            return Ok(());
+        }
+        
+        // Sort by semver
+        let sorted = sort_versions_semver(all_versions);
+        
+        // Calculate statistics
+        let total_count = sorted.len();
+        let newest = &sorted[0];
+        let oldest = &sorted[sorted.len() - 1];
+        
+        // Print summary
+        println!("\n{} {}", "📦".bright_cyan(), attr_name.bold().bright_white());
+        println!("{}", "━".repeat(60).bright_black());
+        println!("  {} {}  {} {}  {} {}", 
+            "Total:".bright_yellow(), 
+            total_count.to_string().bold(),
+            "Newest:".bright_green(),
+            newest.version.clone().green().bold(),
+            "Oldest:".bright_blue(),
+            oldest.version.clone().blue()
+        );
+        
+        // Determine display limit
+        let display_limit = if show_all { total_count } else { limit.min(total_count) };
+        
+        println!();
+        
+        let rows: Vec<VersionRow> = sorted.iter()
+            .take(display_limit)
+            .map(|entry| VersionRow {
+                version: entry.version.clone(),
+                commit: entry.commit_sha.clone(),
+                date: format_relative_time(entry.timestamp),
+                nar_hash: if entry.nar_hash == "unknown" { 
+                    "-".to_string()
+                } else { 
+                    entry.nar_hash.clone()
+                },
+            })
+            .collect();
+        
+        let mut table = Table::new(rows);
+        table.with(Style::rounded())
+            .with(Modify::new(Rows::first()).with(Color::FG_BRIGHT_CYAN));
+        println!("{}", table);
+        
+        if display_limit < total_count {
+            println!("\n  {} and {} more versions (use {} to see all)", 
+                "...".dimmed(), 
+                (total_count - display_limit).to_string().bold(),
+                "-a".bright_cyan()
+            );
         }
     }
 
@@ -258,11 +332,123 @@ fn cmd_generate(_input: PathBuf, _output: PathBuf, _db: ArchiverDb) -> Result<()
     std::process::exit(1);
 }
 
+/// Sorts versions using semantic versioning (newest first)
+fn sort_versions_semver(mut versions: Vec<archiver_core::PackageEntry>) -> Vec<archiver_core::PackageEntry> {
+    versions.sort_by(|a, b| {
+        use semver::Version;
+        
+        // Try to parse as semver
+        let a_semver = Version::parse(&a.version);
+        let b_semver = Version::parse(&b.version);
+        
+        match (a_semver, b_semver) {
+            (Ok(av), Ok(bv)) => {
+                // Both are valid semver - compare them (reversed for newest first)
+                bv.cmp(&av)
+            }
+            (Ok(_), Err(_)) => {
+                // a is valid semver, b is not - a comes first
+                std::cmp::Ordering::Less
+            }
+            (Err(_), Ok(_)) => {
+                // b is valid semver, a is not - b comes first
+                std::cmp::Ordering::Greater
+            }
+            (Err(_), Err(_)) => {
+                // Neither is valid semver - compare by timestamp (newer first)
+                b.timestamp.cmp(&a.timestamp)
+            }
+        }
+    });
+    
+    versions
+}
+
+/// Filters versions based on criteria
+fn filter_versions(
+    versions: Vec<archiver_core::PackageEntry>,
+    major: Option<u64>,
+    pattern: Option<&str>,
+    since: Option<&str>,
+) -> Result<Vec<archiver_core::PackageEntry>> {
+    use semver::Version;
+    use regex::Regex;
+    
+    let mut filtered = versions;
+    
+    // Filter by major version
+    if let Some(major_ver) = major {
+        filtered = filtered.into_iter()
+            .filter(|entry| {
+                if let Ok(v) = Version::parse(&entry.version) {
+                    v.major == major_ver
+                } else {
+                    // For non-semver, check if version starts with major number
+                    entry.version.starts_with(&format!("{}.", major_ver))
+                }
+            })
+            .collect();
+    }
+    
+    // Filter by regex pattern
+    if let Some(pat) = pattern {
+        let re = Regex::new(pat)
+            .with_context(|| format!("Invalid regex pattern: {}", pat))?;
+        filtered = filtered.into_iter()
+            .filter(|entry| re.is_match(&entry.version))
+            .collect();
+    }
+    
+    // Filter by date
+    if let Some(since_str) = since {
+        use chrono::NaiveDate;
+        let since_date = NaiveDate::parse_from_str(since_str, "%Y-%m-%d")
+            .with_context(|| format!("Invalid date format: {}. Expected YYYY-MM-DD", since_str))?;
+        let since_timestamp = since_date.and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp() as u64;
+        
+        filtered = filtered.into_iter()
+            .filter(|entry| entry.timestamp >= since_timestamp)
+            .collect();
+    }
+    
+    Ok(filtered)
+}
+
+/// Formats timestamp as relative time (e.g., "2 days ago")
+fn format_relative_time(timestamp: u64) -> String {
+    let dt = DateTime::<Utc>::from_timestamp(timestamp as i64, 0)
+        .unwrap_or_else(|| DateTime::<Utc>::MIN_UTC);
+    let now = Utc::now();
+    let duration = now.signed_duration_since(dt);
+    
+    if duration.num_seconds() < 60 {
+        "just now".to_string()
+    } else if duration.num_minutes() < 60 {
+        let mins = duration.num_minutes();
+        format!("{} min{} ago", mins, if mins == 1 { "" } else { "s" })
+    } else if duration.num_hours() < 24 {
+        let hours = duration.num_hours();
+        format!("{} hour{} ago", hours, if hours == 1 { "" } else { "s" })
+    } else if duration.num_days() < 30 {
+        let days = duration.num_days();
+        format!("{} day{} ago", days, if days == 1 { "" } else { "s" })
+    } else if duration.num_days() < 365 {
+        let months = duration.num_days() / 30;
+        format!("{} month{} ago", months, if months == 1 { "" } else { "s" })
+    } else {
+        let years = duration.num_days() / 365;
+        format!("{} year{} ago", years, if years == 1 { "" } else { "s" })
+    }
+}
+
 /// Displays database statistics
 fn cmd_stats(db: ArchiverDb) -> Result<()> {
-    println!("Database Statistics:");
-    println!("  Packages: {}", db.package_count());
-    println!("  Processed commits: {}", db.processed_commit_count());
+    println!("{}", "Database Statistics:".bright_cyan().bold());
+    println!("  {}: {}", "Packages".bright_yellow(), db.package_count().to_string().bold());
+    println!("  {}: {}", "Processed commits".bright_yellow(), db.processed_commit_count().to_string().bold());
     Ok(())
 }
 

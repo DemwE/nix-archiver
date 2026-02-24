@@ -21,3 +21,6 @@ strsim = { workspace = true }
 tabled = { workspace = true }
 chrono = { workspace = true }
 rayon = { workspace = true }
+colored = { workspace = true }
+semver = { workspace = true }
+regex = { workspace = true }

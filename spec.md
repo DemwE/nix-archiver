@@ -117,26 +117,70 @@ members = [
         - Options: `--repo`, `--from`, `--max-commits`, `--threads`, `--batch-size`
         - Enhanced progress logging with speed, ETA, and statistics
         - Configurable thread count and batch size for performance tuning
-    - `search` - Search for package versions with table-formatted output
-        - Table display with version, commit SHA, date, and NAR hash
-        - Fuzzy matching suggestions for typos
-        - Color-coded output with emoji indicators
-    - `stats` - Display database statistics
+    - `search` - Search for package versions with enhanced display
+        - **Table Display**: Version, commit SHA, date, and NAR hash
+        - **Semantic Sorting**: Versions sorted by semantic versioning (newest first)
+        - **Color-Coded Output**: 
+            - Newest version: Green with star (★) marker
+            - Other versions: White with dimmed styling
+            - Headers: Bright cyan
+            - Statistics: Yellow labels
+            - Relative times: Dimmed (e.g., "2 days ago")
+        - **Statistics Summary**: Total versions, newest/oldest timestamps
+        - **Fuzzy Matching**: Suggests similar package names on typo
+        - **Filtering Options**:
+            - `--limit/-n NUM`: Show only NUM newest versions (default: 50)
+            - `--all/-a`: Show all versions (override limit)
+            - `--major/-m NUM`: Filter by major version (e.g., `-m 14` for 14.x.x)
+            - `--pattern/-p REGEX`: Filter by version regex pattern
+            - `--since/-s DATE`: Show versions added since date (YYYY-MM-DD)
+        - **Example Usage**:
+            ```bash
+            # Show latest 50 versions (default)
+            nix-archiver search nodejs
+            
+            # Show all versions
+            nix-archiver search nodejs --all
+            
+            # Show only major version 14
+            nix-archiver search nodejs --major 14
+            
+            # Show versions matching pattern
+            nix-archiver search nodejs --pattern '^14\.'
+            
+            # Show versions added since specific date
+            nix-archiver search nodejs --since 2023-01-01
+            
+            # Combine filters: major 14, last 20 versions
+            nix-archiver search nodejs -m 14 -n 20
+            ```
+    - `stats` - Display database statistics with colored output
     - `generate` - Generate `frozen.nix` file (TODO)
 - **Features**:
-    - Fuzzy matching for version suggestions (using `strsim`)
-    - Error handling with helpful suggestions
-    - Comprehensive logging system (INFO/DEBUG/WARN/ERROR levels)
-    - Progress tracking with real-time metrics
-    - Table-formatted output using `tabled` library
-    - Human-readable timestamps and durations
-    - Number formatting with thousand separators
+    - **Semantic Version Sorting**: Proper parsing and comparison of semver versions
+    - **Advanced Filtering**: Multiple filter types (major version, regex, date)
+    - **Color-Coded Output**: Terminal colors using `colored` crate
+    - **Relative Time Formatting**: Human-readable timestamps ("2 days ago", "3 months ago")
+    - **Performance Display**: Shows newest version prominently with star marker
+    - **Fuzzy Matching**: Suggests similar package names using `strsim`
+    - **Error Handling**: Helpful error messages with suggestions
+    - **Comprehensive Logging**: INFO/DEBUG/WARN/ERROR levels
+    - **Progress Tracking**: Real-time metrics for indexing
+    - **Table Formatting**: Clean table output using `tabled` library
 - **Logging Features**:
     - Startup information (threads, repository, commit details)
     - Batch progress with speed and ETA
     - Final statistics summary (time, commits, packages, speed, errors)
     - Debug mode with flush timing and thread utilization
-- **Status**: ✅ CLI implemented with enhanced logging, `generate` command pending
+- **Dependencies**:
+    - `clap` (CLI argument parsing)
+    - `tabled` (table formatting)
+    - `colored` (terminal colors)
+    - `semver` (semantic version parsing)
+    - `regex` (pattern filtering)
+    - `chrono` (date/time handling)
+    - `strsim` (fuzzy matching)
+- **Status**: ✅ CLI implemented with enhanced display, filtering, and sorting; `generate` command pending
 
 ---
 
@@ -226,6 +270,7 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 - [x] **Phase 5a**: Version validation and filtering (Nix code detection).
 - [x] **Phase 5b**: Complete NAR hashing implementation (Nix-independent).
 - [x] **Phase 6a**: Enhanced search output with table formatting.
+- [x] **Phase 6c**: Advanced CLI enhancements (semantic sorting, filtering, colors, statistics).
 - [x] **Phase 7**: Parallel processing with Rayon for multi-core utilization.
 - [x] **Phase 8a**: Comprehensive logging system with progress tracking and statistics.
 - [x] **Phase 8b**: Resumable indexing with atomic commit tracking.
