@@ -141,6 +141,11 @@ impl ArchiverDb {
         self.packages.len()
     }
 
+    /// Checks if database is empty (no packages indexed yet)
+    pub fn is_empty(&self) -> Result<bool> {
+        Ok(self.packages.is_empty())
+    }
+
     /// Returns the number of processed commits
     pub fn processed_commit_count(&self) -> usize {
         self.processed_commits.len()
