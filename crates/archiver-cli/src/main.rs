@@ -84,11 +84,11 @@ enum Commands {
         
         /// Search by major version (e.g., "20" matches "20.x.x")
         #[arg(short, long)]
-        major: bool,
+        major: Option<u64>,
 
         /// Use fuzzy pattern matching
         #[arg(short, long)]
-        pattern: bool,
+        pattern: Option<String>,
 
         /// Show versions since date (YYYY-MM-DD)
         #[arg(long)]

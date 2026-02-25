@@ -1,18 +1,13 @@
-//! Commit processing logic
+//! Main indexing logic
 
 use anyhow::{Context, Result};
-use archiver_core::PackageEntry;
-use git2::{Commit, Oid, Repository};
-use rayon::prelude::*;
-use regex::Regex;
+use git2::{Oid, Repository};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::formatting::{format_duration, format_number, format_unix_timestamp};
 use crate::indexer::Indexer;
-use crate::nar::compute_nar_hash_for_blob;
-use crate::parsers::extract_package_info_static;
-use crate::stats::{CommitStats, IndexStats};
+use crate::stats::IndexStats;
 
 impl Indexer {
     /// Indexes all commits from the specified commit backwards
@@ -128,7 +123,7 @@ impl Indexer {
                     if speed > 0.0 {
                         let remaining = max.saturating_sub(commits_done);
                         let eta_secs = remaining as f64 / speed;
-                        format_duration(Duration::from_secs_f64(eta_secs))
+                        format_duration(std::time::Duration::from_secs_f64(eta_secs))
                     } else {
                         "calculating...".to_string()
                     }
@@ -254,199 +249,5 @@ impl Indexer {
         }
         
         Ok(final_stats)
-    }
-
-    /// Processes a batch of commits in parallel
-    /// Returns list of (commit_sha, timestamp) pairs to mark as processed after flush
-    fn process_batch(&self, oids: &[Oid], stats: &Arc<Mutex<IndexStats>>) -> Result<Vec<(String, u64)>> {
-        let repo_path = &self.repo_path;
-        let version_regex = &self.version_regex;
-
-        // OPTIMIZATION: Split batch into chunks - each thread processes multiple commits
-        // with ONE repository open, instead of opening repo for EACH commit!
-        let num_threads = rayon::current_num_threads();
-        let chunk_size = (oids.len() + num_threads - 1) / num_threads; // Round up
-        
-        let results: Vec<_> = oids.par_chunks(chunk_size.max(1))
-            .flat_map(|chunk| {
-                // Open repository ONCE per chunk (not per commit!)
-                let repo = match Repository::open(repo_path) {
-                    Ok(r) => r,
-                    Err(e) => return vec![Err(anyhow::Error::from(e))],
-                };
-                
-                // Process all commits in this chunk with same repo instance
-                chunk.iter().map(|oid| {
-                    let commit = repo.find_commit(*oid)?;
-                
-                    log::debug!("Processing commit: {}", oid);
-                    
-                    let commit_stats = self.process_commit_with_repo(&repo, &commit, version_regex)?;
-                    
-                    // Return commit info to mark as processed later (after flush)
-                    let timestamp = commit.time().seconds() as u64;
-                    
-                    Ok::<_, anyhow::Error>((oid.to_string(), timestamp, commit_stats))
-                }).collect::<Vec<_>>()
-            })
-            .collect();
-
-        // Aggregate results and collect commits to mark
-        let mut stats_lock = stats.lock().unwrap();
-        let mut commits_to_mark = Vec::new();
-        
-        for result in results {
-            match result {
-                Ok((commit_sha, timestamp, commit_stats)) => {
-                    stats_lock.processed += 1;
-                    stats_lock.packages_found += commit_stats.packages_found;
-                    stats_lock.packages_inserted += commit_stats.packages_inserted;
-                    commits_to_mark.push((commit_sha, timestamp));
-                }
-                Err(e) => {
-                    log::warn!("Failed to process commit: {:?}", e);
-                    stats_lock.errors += 1;
-                }
-            }
-        }
-
-        Ok(commits_to_mark)
-    }
-
-    /// Processes a single commit with FULL tree walk (for initial HEAD scan)
-    /// This indexes ALL packages in the commit to build complete database
-    fn process_commit_full_scan(&self, repo: &Repository, commit: &Commit) -> Result<CommitStats> {
-        use git2::{TreeWalkMode, TreeWalkResult};
-        
-        let tree = commit.tree().context("Failed to get commit tree")?;
-        let timestamp = commit.time().seconds() as u64;
-        let commit_sha = commit.id().to_string();
-        let version_regex = &self.version_regex;
-
-        let mut stats = CommitStats::default();
-        let db = &self.db;
-
-        // Walk entire tree to index all packages
-        tree.walk(TreeWalkMode::PreOrder, |root, entry| {
-            let full_path = format!("{}{}", root, entry.name().unwrap_or(""));
-            
-            // We're only interested in .nix files in pkgs/ directory
-            if !full_path.starts_with("pkgs/") || !full_path.ends_with(".nix") {
-                return TreeWalkResult::Ok;
-            }
-
-            // Get object and check if it's a blob (file)
-            if let Ok(object) = entry.to_object(repo) {
-                if let Some(blob) = object.as_blob() {
-                    let oid = blob.id();
-                    Self::process_file(repo, &full_path, oid, &commit_sha, timestamp, db, version_regex, &mut stats);
-                }
-            }
-
-            TreeWalkResult::Ok
-        })?;
-
-        Ok(stats)
-    }
-
-    /// Processes a single commit with DIFF optimization (only changed files)
-    /// This is much faster than full tree walk - used after initial HEAD scan
-    fn process_commit_with_repo(&self, repo: &Repository, commit: &Commit, version_regex: &Regex) -> Result<CommitStats> {
-        let tree = commit.tree().context("Failed to get commit tree")?;
-        let timestamp = commit.time().seconds() as u64;
-        let commit_sha = commit.id().to_string();
-
-        let mut stats = CommitStats::default();
-        let db = &self.db;
-
-        // OPTIMIZATION: Use external git log to get changed files (much faster!)
-        // Git's internal diff machinery is highly optimized with packfile deltas
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(&self.repo_path)
-            .arg("log")
-            .arg("--name-only")
-            .arg("--diff-filter=AM")  // Added or Modified only
-            .arg("--format=")  // No commit message, just filenames
-            .arg("-1")  // Only this commit
-            .arg(&commit_sha)
-            .output()
-            .context("Failed to run git log")?;
-
-        if !output.status.success() {
-            anyhow::bail!("git log failed: {}", String::from_utf8_lossy(&output.stderr));
-        }
-
-        let changed_files = String::from_utf8_lossy(&output.stdout);
-        
-        // Process each changed file
-        for line in changed_files.lines() {
-            let full_path = line.trim();
-            if full_path.is_empty() {
-                continue;
-            }
-            
-            // We're only interested in .nix files in pkgs/ directory
-            if !full_path.starts_with("pkgs/") || !full_path.ends_with(".nix") {
-                continue;
-            }
-
-            // Get the file's OID from the tree
-            if let Ok(entry) = tree.get_path(std::path::Path::new(full_path)) {
-                Self::process_file(repo, full_path, entry.id(), &commit_sha, timestamp, db, version_regex, &mut stats);
-            }
-        }
-
-        Ok(stats)
-    }
-
-    /// Helper function to process a single file (shared between diff and tree walk)
-    fn process_file(
-        repo: &Repository,
-        full_path: &str,
-        oid: Oid,
-        commit_sha: &str,
-        timestamp: u64,
-        db: &archiver_db::ArchiverDb,
-        version_regex: &Regex,
-        stats: &mut CommitStats,
-    ) {
-        // Get the blob from the tree
-        if let Ok(object) = repo.find_object(oid, None) {
-            if let Some(blob) = object.as_blob() {
-                // Calculate NAR hash from blob content
-                let nar_hash = match compute_nar_hash_for_blob(blob.content()) {
-                    Ok(hash) => Some(hash),
-                    Err(e) => {
-                        log::debug!("Failed to compute NAR hash for {}: {}", full_path, e);
-                        None
-                    }
-                };
-                
-                if let Ok(content) = std::str::from_utf8(blob.content()) {
-                    // Try to extract package information
-                    if let Some(package_info) = extract_package_info_static(full_path, content, version_regex, nar_hash) {
-                        stats.packages_found += 1;
-
-                        let entry = PackageEntry::new(
-                            package_info.attr_name,
-                            package_info.version,
-                            commit_sha.to_string(),
-                            package_info.nar_hash.unwrap_or_else(|| "unknown".to_string()),
-                            timestamp,
-                        );
-
-                        // Insert into database (with deduplication)
-                        match db.insert_if_better(&entry) {
-                            Ok(true) => stats.packages_inserted += 1,
-                            Ok(false) => {},  // Not inserted - older version
-                            Err(e) => {
-                                log::warn!("Failed to insert package {}: {:?}", entry.key(), e);
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
