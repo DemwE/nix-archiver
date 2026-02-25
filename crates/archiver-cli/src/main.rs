@@ -143,13 +143,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cli_parsing() {
-        // Test that CLI parses correctly
-    }
-}

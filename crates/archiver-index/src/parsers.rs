@@ -4,7 +4,7 @@ use regex::Regex;
 use crate::stats::PackageInfo;
 
 /// Extracts package information from a .nix file (static version for use in closures)
-pub(crate) fn extract_package_info_static(
+pub fn extract_package_info_static(
     path: &str,
     content: &str,
     version_regex: &Regex,
@@ -35,7 +35,7 @@ pub(crate) fn extract_package_info_static(
 }
 
 /// Validates that a version string looks like a real version, not Nix code
-pub(crate) fn is_valid_version(version: &str) -> bool {
+pub fn is_valid_version(version: &str) -> bool {
     // Reject versions containing Nix interpolation or code patterns
     if version.contains("${") || version.contains("lib.") || 
        version.contains('(') || version.contains(')') ||

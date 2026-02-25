@@ -7,7 +7,7 @@ use std::io::Write;
 
 /// Computes NAR hash for a single file (Git blob)
 /// Returns hash in SRI format: sha256-<base64>
-pub(crate) fn compute_nar_hash_for_blob(content: &[u8]) -> Result<String> {
+pub fn compute_nar_hash_for_blob(content: &[u8]) -> Result<String> {
     // NAR format for a regular file:
     // - "nix-archive-1\0\0\0\0" (16 bytes, magic + padding)
     // - "(\0\0\0\0\0\0\0" (8 bytes, opening paren + padding)

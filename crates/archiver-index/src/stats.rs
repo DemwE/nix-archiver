@@ -5,7 +5,7 @@ use crate::formatting::{format_number, format_duration};
 
 /// Information extracted from package file
 #[derive(Debug)]
-pub(crate) struct PackageInfo {
+pub struct PackageInfo {
     pub attr_name: String,
     pub version: String,
     pub nar_hash: Option<String>,
