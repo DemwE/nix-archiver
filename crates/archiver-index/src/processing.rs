@@ -71,20 +71,30 @@ impl Indexer {
         log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         for oid_result in revwalk {
+            let oid = oid_result.context("Failed to get commit OID")?;
+            
+            // Skip if already processed (but count towards limit)
+            if self.db.is_commit_processed(&oid.to_string())? {
+                let mut stats_lock = stats.lock().unwrap();
+                stats_lock.skipped += 1;
+                total_processed += 1;  // Count skipped commits towards limit
+                
+                // Check if we've reached the limit (including skipped commits)
+                if let Some(max) = max_commits {
+                    if total_processed >= max {
+                        log::info!("Reached max commit limit: {} (all already processed)", max);
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // Check limit for new commits to process
             if let Some(max) = max_commits {
                 if total_processed >= max {
                     log::info!("Reached max commit limit: {}", max);
                     break;
                 }
-            }
-
-            let oid = oid_result.context("Failed to get commit OID")?;
-            
-            // Skip if already processed
-            if self.db.is_commit_processed(&oid.to_string())? {
-                let mut stats_lock = stats.lock().unwrap();
-                stats_lock.skipped += 1;
-                continue;
             }
 
             batch.push(oid);

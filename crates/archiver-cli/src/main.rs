@@ -44,16 +44,20 @@ enum Commands {
         from: String,
 
         /// Stop indexing at this commit SHA (optional)
-        #[arg(long, conflicts_with = "to_date", conflicts_with = "max_commits")]
+        #[arg(long, conflicts_with = "to_date", conflicts_with = "max_commits", conflicts_with = "full_repo")]
         to_commit: Option<String>,
 
         /// Stop indexing at this date (YYYY-MM-DD) (optional)
-        #[arg(long, conflicts_with = "to_commit", conflicts_with = "max_commits")]
+        #[arg(long, conflicts_with = "to_commit", conflicts_with = "max_commits", conflicts_with = "full_repo")]
         to_date: Option<String>,
 
         /// Maximum number of commits to process
-        #[arg(short, long)]
+        #[arg(short, long, conflicts_with = "full_repo")]
         max_commits: Option<usize>,
+
+        /// Index entire repository history (no commit limit)
+        #[arg(long, conflicts_with = "max_commits", conflicts_with = "to_commit", conflicts_with = "to_date")]
+        full_repo: bool,
 
         /// Number of threads for parallel processing (default: number of CPU cores)
         #[arg(short = 'j', long)]
@@ -121,8 +125,8 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to open database at {:?}", cli.database))?;
 
     match cli.command {
-        Commands::Index { repo, from, to_commit, to_date, max_commits, threads, batch_size } => {
-            cmd_index(repo, from, to_commit, to_date, max_commits, threads, batch_size, db)?;
+        Commands::Index { repo, from, to_commit, to_date, max_commits, full_repo, threads, batch_size } => {
+            cmd_index(repo, from, to_commit, to_date, max_commits, full_repo, threads, batch_size, db)?;
         }
         Commands::Search { attr_name, version, limit, major, pattern, since, all } => {
             cmd_search(attr_name, version, limit, major, pattern, since, all, db)?;
@@ -144,7 +148,8 @@ fn cmd_index(
     from_commit: String, 
     to_commit: Option<String>,
     to_date: Option<String>,
-    max_commits: Option<usize>, 
+    max_commits: Option<usize>,
+    full_repo: bool,
     threads: Option<usize>, 
     batch_size: usize, 
     db: ArchiverDb
@@ -175,8 +180,11 @@ fn cmd_index(
         from_commit
     };
 
-    // Calculate max_commits based on to_commit or to_date if provided
-    let computed_max_commits = if let Some(to_date_str) = to_date {
+    // Calculate max_commits based on to_commit, to_date, or full_repo
+    let computed_max_commits = if full_repo {
+        log::info!("Indexing entire repository history (no limit)");
+        None
+    } else if let Some(to_date_str) = to_date {
         log::info!("Indexing until date: {}", to_date_str);
         let to_sha = resolve_commit_by_date(&repo_path, &to_date_str)?;
         let count = count_commits_between(&repo_path, &from_sha, &to_sha)?;
