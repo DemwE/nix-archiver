@@ -1,282 +1,53 @@
-# Nix-Archiver 🚀
+# nix-archiver
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Narzędzie do indeksowania historii Nixpkgs i przypinania pakietów do konkretnych wersji historycznych w NixOS.
 
-Deklaratywne przypisywanie pakietów do konkretnych wersji historycznych w ekosystemie NixOS.
+## Czym jest nix-archiver?
 
-## 📋 Opis projektu
+`nix-archiver` rozwiązuje problem "brakujących wersji" w NixOS — gdy potrzebujesz konkretnej starszej wersji pakietu (np. `nodejs 18.12.0`), ale nie ma jej już w aktualnym nixpkgs. Narzędzie indeksuje historię Git repozytorium nixpkgs i pozwala znaleźć dokładny commit, w którym dana wersja była dostępna, a następnie wygenerować gotowe wyrażenie Nix.
 
-Nix-Archiver to modularne narzędzie w Rust, które rozwiązuje problem "brakujących wersji" w NixOS poprzez:
-- Indeksowanie historii Git repozytorium Nixpkgs
-- Automatyczne wykrywanie i katalogowanie wersji pakietów
-- Generowanie odtwarzalnych wyrażeń Nix dla konkretnych wersji
-- Deduplikację danych (tylko najnowszy commit dla każdej wersji)
+## Instalacja
 
-## ⚡ Quickstart
+### Budowanie ze źródeł
 
-```bash
-# Najszybszy start - użyj bezpośrednio z GitHub (wymaga nix flakes)
-nix run github:DemwE/nix-archiver -- --help
-
-# Lub zainstaluj lokalnie
-git clone https://github.com/DemwE/nix-archiver.git
-cd nix-archiver
-nix profile install .
-
-# Podstawowe użycie
-nix-archiver search nodejs           # Znajdź wersje pakietu
-nix-archiver stats                   # Pokaż statystyki bazy
-```
-
-📖 **Instalacja w NixOS**: Zobacz [QUICK_START.md](QUICK_START.md) dla gotowych do skopiowania konfiguracji.
-
-📖 **Szczegółowe instrukcje**: Zobacz [INSTALL.md](INSTALL.md) dla wszystkich metod instalacji.
-
-Dla pełnej integracji z NixOS, zobacz sekcję [Użycie - NixOS Module](#opcja-1-nixos-module-zalecane-dla-użytkowników-nixos).
-
-## 🏗️ Architektura
-
-Projekt składa się z czterech crate'ów:
-
-### `archiver-core`
-Wspólne modele danych i logika generowania kodu Nix.
-- Struktura `PackageEntry` - reprezentacja pakietu w bazie
-- Generowanie bloków `fetchTarball` i wyrażeń Nix
-- Konwersja hashów NAR do formatu SRI
-
-### `archiver-db`
-Warstwa persistencji z deduplikacją.
-- Embedded KV store (Sled)
-- Logika `insert_if_better` - tylko najnowsze commity
-- Śledzenie przetworzonych commitów
-
-### `archiver-index`
-Silnik ETL do przetwarzania repozytorium Nixpkgs.
-- Walker Git używający `git2-rs`
-- Parsowanie plików `.nix` w poszukiwaniu wersji
-- (TODO) Obliczanie hashów NAR bezpośrednio z obiektów Git
-
-### `archiver-cli`
-Interfejs CLI.
-- Komendy: `index`, `search`, `generate`, `stats`
-- Fuzzy matching do sugestii wersji
-- (TODO) Generowanie pliku `frozen.nix`
-
-## 🚀 Instalacja
-
-📋 **Pełna dokumentacja**: [INSTALL.md](INSTALL.md) - wszystkie metody instalacji, troubleshooting, aktualizacja i deinstalacja.
-
-### Szybka instalacja
-
-**Metoda 1: Nix (zalecane)**
-```bash
-# Zainstaluj system-wide używając nix profile
-nix profile install github:DemwE/nix-archiver
-
-# Lub użyj bezpośrednio bez instalacji
-nix run github:DemwE/nix-archiver -- --help
-```
-
-**Metoda 2: Z lokalnego repo**
 ```bash
 git clone https://github.com/DemwE/nix-archiver.git
 cd nix-archiver
-nix profile install .     # z Nix
-# LUB
-cargo install --path crates/archiver-cli  # z Cargo
+nix-build   # lub: cargo build --release
 ```
 
-**Metoda 3: NixOS system-wide**
-```nix
-# /etc/nixos/configuration.nix
-{ config, pkgs, ... }:
+### Integracja z NixOS
 
-let
-  # Pakiet z GitHub (działająca konfiguracja)
-  nix-archiver = (pkgs.callPackage (pkgs.fetchFromGitHub {
-    owner = "DemwE";
-    repo = "nix-archiver";
-    rev = "master";
-    sha256 = "sha256-CWwxZjkqI50VVKuP0umG4W6O6WRldg3jxbFCRElDGKo=";
-  }) {}).overrideAttrs (oldAttrs: {
-    buildInputs = (oldAttrs.buildInputs or []) ++ [ pkgs.openssl ];
-    nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [ pkgs.pkg-config pkgs.perl ];
-    OPENSSL_NO_VENDOR = "1";
-  });
-in
-{
-  # Prosty pakiet
-  environment.systemPackages = [ nix-archiver ];
-  
-  # LUB pełny moduł z auto-indeksowaniem (zalecane)
-  # imports = [ /path/to/nix-archiver/modules/nix-archiver.nix ];
-  # services.nix-archiver.enable = true;
-}
-```
+Gotowy moduł NixOS bez flaków — wystarczy jeden `imports` w `configuration.nix`.
+Szczegóły: [docs/nixos-module.md](docs/nixos-module.md).
 
-> **💡 Uwaga**: Konfiguracja `overrideAttrs` rozwiązuje problemy kompilacji związane z OpenSSL. Zobacz [INSTALL.md](INSTALL.md) dla szczegółów technicznych.
-
-Więcej metod (cargo, flakes, overlays, development): [INSTALL.md](INSTALL.md)
-
-## 📖 Użycie
-
-### Opcja 1: NixOS Module (zalecane dla użytkowników NixOS)
-
-Dodaj moduł do swojej konfiguracji `/etc/nixos/configuration.nix`:
-
-```nix
-{ config, pkgs, ... }:
-
-{
-  imports = [
-    /path/to/nix-archiver/modules/nix-archiver.nix
-  ];
-
-  services.nix-archiver = {
-    enable = true;
-    
-    # Automatyczne indeksowanie
-    indexer = {
-      enable = true;
-      updateInterval = "daily";
-    };
-    
-    # Pinuj konkretne wersje pakietów
-    pinnedPackages = {
-      nodejs = "20.11.0";
-      python3 = "3.11.7";
-      postgresql = "15.5";
-    };
-  };
-
-  # Użyj przypięte wersje
-  environment.systemPackages = with pkgs; [
-    nodejs      # wersja 20.11.0
-    python3     # wersja 3.11.7
-    postgresql  # wersja 15.5
-  ];
-}
-```
-
-Pełna dokumentacja modułu: [modules/README.md](modules/README.md)
-
-### Opcja 2: Tradycyjne CLI
-
-#### Indeksowanie repozytorium Nixpkgs
+## Szybki start
 
 ```bash
-# Sklonuj Nixpkgs (jeśli jeszcze nie masz)
-git clone https://github.com/NixOS/nixpkgs.git
+# 1. Zaindeksuj historię nixpkgs (np. od 2024-01-01)
+nix-archiver index --repo /ścieżka/do/nixpkgs --to-date 2024-01-01
 
-# Zindeksuj ostatnie 1000 commitów
-nix-archiver index \
-  --repo ./nixpkgs \
-  --from HEAD \
-  --max-commits 1000
-```
-
-#### Wyszukiwanie wersji pakietu
-
-```bash
-# Pokaż wszystkie wersje nodejs
+# 2. Szukaj pakietów (prefix lub substring)
 nix-archiver search nodejs
+nix-archiver search python314
+nix-archiver search biomejs          # znajdzie vscode-extensions.biomejs.biome
 
-# Znajdź konkretną wersję
-nix-archiver search nodejs 14.17.0
+# 3. Konkretna wersja
+nix-archiver search nodejs 20.11.0
+
+# 4. Wygeneruj frozen.nix z packages.nix
+nix-archiver generate --input packages.nix --output frozen.nix
 ```
 
-#### Generowanie packages.nix
+## Dokumentacja
 
-```bash
-# Wygeneruj plik z pinowanymi pakietami
-nix-archiver generate -o packages.nix
-```
+| Dokument | Opis |
+|---|---|
+| [docs/usage.md](docs/usage.md) | Wszystkie komendy CLI ze szczegółami |
+| [docs/architecture.md](docs/architecture.md) | Architektura kodu (crate'y) |
+| [docs/nixos-module.md](docs/nixos-module.md) | Integracja z NixOS bez flaków |
+| [spec.md](spec.md) | Specyfikacja techniczna implementacji |
 
-#### Wyświetlanie statystyk
+## Licencja
 
-```bash
-nix-archiver stats
-```
-
-## 🛠️ Development
-
-### Struktura workspace
-
-```
-nix-archiver/
-├── Cargo.toml              # Root workspace
-├── flake.nix               # Nix flake definition
-├── shell.nix               # Nix shell (legacy)
-├── spec.md                 # Szczegółowa specyfikacja techniczna
-└── crates/
-    ├── archiver-core/      # Modele danych
-    ├── archiver-db/        # Warstwa bazy danych
-    ├── archiver-index/     # Silnik indeksowania
-    └── archiver-cli/       # CLI interface
-```
-
-### Uruchamianie testów
-
-```bash
-# Wszystkie testy
-cargo test --workspace
-
-# Testy dla konkretnego crate
-cargo test -p archiver-core
-
-# Testy z logami
-RUST_LOG=debug cargo test
-```
-
-### Formatowanie i linting
-
-```bash
-# Format
-cargo fmt --all
-
-# Clippy
-cargo clippy --workspace -- -D warnings
-```
-
-## 📝 Roadmap
-
-**Ukończone Fazy** (1-8b): ✅
-- Models, database, Git indexer, CLI, NAR hashing, table formatting, parallel processing, logging, resumability
-
-**Phase 10-11** (W realizacji): 🔄
-- ✅ **Level 1**: NixOS Module - deklaratywne pinowanie pakietów, automatyczne indeksowanie przez systemd
-- [ ] **Phase 10**: Lock files, apply/sync commands, format converters
-- [ ] **Phase 11**: Pełna integracja NixOS module (testy, dokumentacja)
-- [ ] **Phase 12**: Flake library & outputs
-- [ ] **Phase 13**: Home Manager integration
-- [ ] **Phase 14+**: Cloud API, web dashboard, advanced features
-
-📋 **Szczegółowa roadmapa**: Zobacz [ROADMAP.md](ROADMAP.md) dla pełnego planu integracji systemowej, NixOS modules, flake support, i długoterminowej wizji projektu.
-
-## 🤝 Wkład
-
-Pull requesty są mile widziane! Przy większych zmianach, proszę najpierw otworzyć issue.
-
-## 📄 Licencja
-
-MIT
-
-## 🔗 Linki
-
-### Dokumentacja projektu
-- **[Quick Start](QUICK_START.md)** - 🚀 Gotowe konfiguracje (kopiuj-wklej)
-- **[Setup](SETUP.md)** - ⚠️ Przygotowanie przed pierwszym użyciem
-- **[Instalacja](INSTALL.md)** - Wszystkie metody instalacji
-- **[Troubleshooting](TROUBLESHOOTING.md)** - 🔧 Rozwiązywanie problemów
-- [Specyfikacja techniczna](spec.md) - Szczegółowa specyfikacja
-- [Roadmap i plany rozwoju](ROADMAP.md) - Plan integracji systemowej
-- [Moduł NixOS](modules/README.md) - Dokumentacja modułu
-- [Przykłady NixOS](examples/nixos/) - Przykładowe konfiguracje
-- [Testowanie](TESTING.md) - Instrukcje testowania
-- [Changelog](CHANGELOG.md) - Historia zmian
-- [Performance](PERFORMANCE.md) - Optymalizacja wydajności
-- [Logging](LOGGING.md) - Konfiguracja logowania
-
-### Zewnętrzne
-- [NixOS](https://nixos.org)
-- [Nixpkgs](https://github.com/NixOS/nixpkgs)
+MIT — szczegóły w pliku [LICENSE](LICENSE).
