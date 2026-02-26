@@ -2,9 +2,76 @@
 
 use archiver_core::PackageEntry;
 use anyhow::{Context, Result};
+use data_encoding::{BASE64, HEXLOWER};
+use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
 use std::path::Path;
+
+// ---------------------------------------------------------------------------
+// Compact binary storage format
+// ---------------------------------------------------------------------------
+
+/// Internal representation stored in sled. Uses raw bytes for SHA fields,
+/// eliminating hex/base64 strings and JSON overhead.
+///
+/// Byte savings per entry (typical):
+///   commit_sha: 40-char hex string → [u8; 20]  (-20 bytes)
+///   nar_hash:   ~59-char SRI string → [u8; 32]  (-27 bytes)
+///   JSON overhead (field names, punctuation) → 0 with bincode (-~50 bytes)
+///   Total saving: ~97 bytes per entry
+#[derive(Serialize, Deserialize)]
+struct StoredEntry {
+    attr_name: String,
+    version: String,
+    commit_sha: [u8; 20],
+    nar_hash: [u8; 32],
+    timestamp: u64,
+    is_primary: bool,
+}
+
+/// Serialize a `PackageEntry` into compact binary bytes.
+fn pack(entry: &PackageEntry) -> Result<Vec<u8>> {
+    let sha_vec = HEXLOWER
+        .decode(entry.commit_sha.to_ascii_lowercase().as_bytes())
+        .context("Invalid commit SHA hex encoding")?;
+    let mut commit_bytes = [0u8; 20];
+    commit_bytes.copy_from_slice(&sha_vec);
+
+    let b64 = entry
+        .nar_hash
+        .strip_prefix("sha256-")
+        .context("NAR hash missing 'sha256-' prefix")?;
+    let hash_vec = BASE64
+        .decode(b64.as_bytes())
+        .context("Invalid NAR hash base64 encoding")?;
+    let mut nar_bytes = [0u8; 32];
+    nar_bytes.copy_from_slice(&hash_vec);
+
+    let stored = StoredEntry {
+        attr_name: entry.attr_name.clone(),
+        version: entry.version.clone(),
+        commit_sha: commit_bytes,
+        nar_hash: nar_bytes,
+        timestamp: entry.timestamp,
+        is_primary: entry.is_primary,
+    };
+    bincode::serialize(&stored).context("Failed to serialize PackageEntry")
+}
+
+/// Deserialize a `PackageEntry` from compact binary bytes.
+fn unpack(bytes: &[u8]) -> Result<PackageEntry> {
+    let stored: StoredEntry =
+        bincode::deserialize(bytes).context("Failed to deserialize PackageEntry")?;
+    Ok(PackageEntry {
+        attr_name: stored.attr_name,
+        version: stored.version,
+        commit_sha: HEXLOWER.encode(&stored.commit_sha),
+        nar_hash: format!("sha256-{}", BASE64.encode(&stored.nar_hash)),
+        timestamp: stored.timestamp,
+        is_primary: stored.is_primary,
+    })
+}
 
 /// Main structure managing the database
 pub struct ArchiverDb {
@@ -45,7 +112,7 @@ impl ArchiverDb {
     /// it is replaced only when the new entry has a newer timestamp.
     pub fn insert_if_better(&self, entry: &PackageEntry) -> Result<bool> {
         let key = entry.key();
-        let new_value = serde_json::to_vec(entry)
+        let new_value = pack(entry)
             .context("Failed to serialize PackageEntry")?;
 
         let was_inserted = self.packages.update_and_fetch(key.as_bytes(), |old_value| {
@@ -56,7 +123,7 @@ impl ArchiverDb {
                 }
                 Some(old_bytes) => {
                     // Check timestamp of existing value
-                    match serde_json::from_slice::<PackageEntry>(old_bytes) {
+                    match unpack(old_bytes) {
                         Ok(old_entry) => {
                             if entry.timestamp > old_entry.timestamp {
                                 // New entry is newer - overwrite
@@ -85,7 +152,7 @@ impl ArchiverDb {
 
         // Check if we actually inserted a new entry
         if let Some(final_value) = was_inserted {
-            let final_entry: PackageEntry = serde_json::from_slice(&final_value)
+            let final_entry = unpack(&final_value)
                 .context("Failed to deserialize final entry")?;
             Ok(final_entry.commit_sha == entry.commit_sha)
         } else {
@@ -99,7 +166,7 @@ impl ArchiverDb {
         
         match self.packages.get(key.as_bytes())? {
             Some(bytes) => {
-                let entry = serde_json::from_slice(&bytes)
+                let entry = unpack(&bytes)
                     .context("Failed to deserialize PackageEntry")?;
                 Ok(Some(entry))
             }
@@ -114,7 +181,7 @@ impl ArchiverDb {
 
         for item in self.packages.scan_prefix(prefix.as_bytes()) {
             let (_, value) = item.context("Failed to read from database")?;
-            let entry: PackageEntry = serde_json::from_slice(&value)
+            let entry = unpack(&value)
                 .context("Failed to deserialize PackageEntry")?;
             results.push(entry);
         }
@@ -132,7 +199,7 @@ impl ArchiverDb {
 
         for item in self.packages.scan_prefix(query.as_bytes()) {
             let (_, value) = item.context("Failed to read from database")?;
-            let entry: PackageEntry = serde_json::from_slice(&value)
+            let entry = unpack(&value)
                 .context("Failed to deserialize PackageEntry")?;
             results.entry(entry.attr_name.clone()).or_default().push(entry);
         }

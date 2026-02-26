@@ -52,6 +52,7 @@ members = [
 - Git Operations: `git2` (with vendored features)
 - Cryptography: `sha2`, `data-encoding` (Nix-style Base32)
 - CLI: `clap`, `strsim` (fuzzy matching)
+- Nix AST Parsing: `rnix` (Nix expression parser), `rowan` (generic CST library)
 - Testing: `tempfile`, `regex`
 
 ---
@@ -81,14 +82,23 @@ members = [
     - Processed commits tracking with atomic batch commits
     - Version listing by package name
     - Flush control for batch operations
+    - **Prefix search** (`search_packages(query)` via `scan_prefix`): returns all packages whose `attr_name` starts with `query`, grouped by attribute name (e.g., `"python"` → `python311`, `python312`, `python314`, …)
 - **Status**: ✅ Implemented with tests
 
 ### `archiver-index`
 - **Purpose**: ETL (Extract, Transform, Load) engine.
-- **Dependencies**: `git2-rs`, `regex`, `sha2`, `rayon` (parallel processing), `chrono`.
+- **Dependencies**: `git2-rs`, `rnix` (Nix AST parser), `rowan` (CST traits), `regex` (fallback only), `sha2`, `rayon` (parallel processing), `chrono`.
+- **Module Structure** (`src/parsers/`):
+    - `mod.rs` – orchestration: calls AST parser first, falls back to regex only if `rnix` cannot parse the file
+    - `ast_parser.rs` – three AST strategies (see below)
+    - `regex_fallback.rs` – legacy regex heuristics, safety net only (0 activations in production)
+- **AST Parsing Strategies** (`ast_parser.rs`):
+    1. **Multi-package callPackage + sourceVersion** – traverses the attribute set for `name = callPackage ./path { sourceVersion = { major = "X"; minor = "Y"; patch = "Z"; }; }` patterns; handles files that define multiple versions in a single `.nix` file (e.g., `python311`, `python312`, `python314`, `python315` from one file).
+    2. **mktplcRef** – handles VS Code extension format: `mktplcRef = { version = "…"; name = "…"; publisher = "…"; }`.
+    3. **Single-package pname + version** – collects all `ident = "string"` bindings as a flat variable map, then resolves `pname` + `version` (literal string or interpolated `"${major}.${minor}.${patch}"` / `with sourceVersion; "…"`).
 - **Logic**:
     1. Iterating through Git history of Nixpkgs.
-    2. Parsing `.nix` files for version strings (regex-based with validation).
+    2. Parsing `.nix` files for package metadata using rnix AST (primary) with regex fallback.
     3. Generating NAR hash from Git blob objects using custom NAR serialization.
     4. Tracking progress in `processed_commits` table.
     5. Parallel batch processing (configurable batch size, default 100) using Rayon thread pool.
@@ -108,7 +118,9 @@ members = [
     - Commits marked as processed only after successful batch completion and flush
     - Safe restart after interruption - no duplicate processing or data loss
     - Progress logging with commit counts and package statistics
-- **Status**: ✅ Fully implemented with parallel processing and NAR hashing
+- **Known Limitations**:
+    - Packages that use the attribute-merge operator (`//`) to reference an external attrset for `sourceVersion` (e.g., `python313 = callPackage ./cpython ({} // sources.python313)`) are not yet indexed, because the parser does not follow cross-file references at parse time.
+- **Status**: ✅ Fully implemented with AST-based parsing, parallel processing, and NAR hashing
 
 ### `archiver-cli`
 - **Purpose**: CLI interface and user configuration validation.
@@ -117,7 +129,11 @@ members = [
         - Options: `--repo`, `--from`, `--max-commits`, `--threads`, `--batch-size`
         - Enhanced progress logging with speed, ETA, and statistics
         - Configurable thread count and batch size for performance tuning
-    - `search` - Search for package versions with enhanced display
+    - `search` - Search for package versions with enhanced display and prefix matching
+        - **Prefix Search**: A query without filters (e.g., `search python`) is treated as a prefix — all packages whose `attr_name` starts with that string are returned.
+            - **1 match** → detailed single-package table (Version, Commit SHA, Date, NAR hash)
+            - **Multiple matches, no specific filters** → summary table with columns: Package / Versions / Latest version / Date
+            - **Multiple matches, with `--major`/`--pattern`/`--since`** → detailed view for the best-matching package plus a hint listing the other matching packages
         - **Table Display**: Version, commit SHA, date, and NAR hash
         - **Semantic Sorting**: Versions sorted by semantic versioning (newest first)
         - **Color-Coded Output**: 
@@ -136,6 +152,12 @@ members = [
             - `--since/-s DATE`: Show versions added since date (YYYY-MM-DD)
         - **Example Usage**:
             ```bash
+            # Prefix search — summary table for all python* packages
+            nix-archiver search python
+
+            # Exact match — detailed version table for python312
+            nix-archiver search python312
+
             # Show latest 50 versions (default)
             nix-archiver search nodejs
             
@@ -206,7 +228,9 @@ members = [
     - `regex` (pattern filtering)
     - `chrono` (date/time handling)
     - `strsim` (fuzzy matching)
-- **Status**: ✅ CLI fully implemented with enhanced display, filtering, sorting, and generate command
+- **Additional Output Type**:
+    - `PackageSummaryRow` (`output.rs`): used for grouped multi-package display — fields: `attr_name`, `version_count`, `latest_version`, `latest_date`.
+- **Status**: ✅ CLI fully implemented with prefix search, enhanced display, filtering, sorting, and generate command
 
 ---
 
@@ -303,6 +327,8 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 - [x] **Phase 7**: Parallel processing with Rayon for multi-core utilization.
 - [x] **Phase 8a**: Comprehensive logging system with progress tracking and statistics.
 - [x] **Phase 8b**: Resumable indexing with atomic commit tracking.
+- [x] **Phase 9a**: Prefix search – `search python` returns a grouped summary table of all `python*` packages; exact query returns a detailed single-package view.
+- [x] **Phase 9b**: rnix AST-based parser – replaced regex as primary parser with a three-strategy AST approach (`ast_parser.rs`); regex retained only as a parse-error safety net (0 activations in production). Supports multi-package files (e.g., multiple Python versions defined in one `.nix` file). All 16 tests passing.
 
 **Upcoming Phases**:
 - [ ] **Phase 10**: Core system integration (lock files, apply/sync commands, format converters)
@@ -320,9 +346,11 @@ The indexer implements a robust commit tracking system that ensures safe resumab
 **Current Coverage**:
 - `archiver-core`: 2 unit tests (PackageEntry key, Nix generation)
 - `archiver-db`: 2 unit tests (insert/get, deduplication)
-- `archiver-index`: 5 unit tests (regex, path extraction, version validation, NAR hash computation, NAR hash padding)
+- `archiver-index`: 11 unit tests (AST multi-package callPackage+sourceVersion, mktplcRef, pname+version, interpolated version, regex path extraction, version validation, NAR hash computation, NAR hash padding)
 - `archiver-cli`: 1 unit test (CLI parsing)
-- **Total**: 10 tests, all passing ✅
+- **Total**: 16 tests, all passing ✅
+
+**Test Layout**: All tests have been extracted to dedicated `tests/` subdirectories within each crate, following Rust integration-style co-location conventions.
 
 **Future Tests**:
 - Integration tests with real Nixpkgs repo (small subset)
