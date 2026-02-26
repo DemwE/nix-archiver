@@ -212,6 +212,30 @@ impl ArchiverDb {
         Ok(results)
     }
 
+    /// Searches packages by case-insensitive substring match anywhere in attr_name.
+    ///
+    /// Full-table scan used as fallback when prefix search returns no results.
+    /// e.g. "biomejs" finds "vscode-extensions.biomejs.biome",
+    /// "numpy" finds "python313Packages.numpy".
+    pub fn search_packages_contains(&self, query: &str) -> Result<HashMap<String, Vec<PackageEntry>>> {
+        let query_lower = query.to_ascii_lowercase();
+        let mut results: HashMap<String, Vec<PackageEntry>> = HashMap::new();
+
+        for item in self.packages.iter() {
+            let (_, value) = item.context("Failed to read from database")?;
+            let entry = unpack(&value).context("Failed to deserialize PackageEntry")?;
+            if entry.attr_name.to_ascii_lowercase().contains(&query_lower) {
+                results.entry(entry.attr_name.clone()).or_default().push(entry);
+            }
+        }
+
+        for entries in results.values_mut() {
+            entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        }
+
+        Ok(results)
+    }
+
     /// Marks a commit as processed
     pub fn mark_commit_processed(&self, commit_sha: &str, timestamp: u64) -> Result<()> {
         self.processed_commits

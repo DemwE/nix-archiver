@@ -1,11 +1,12 @@
 //! Search command implementation
 
+use std::collections::HashMap;
 use anyhow::Result;
 use archiver_db::ArchiverDb;
 use colored::Colorize;
 use tabled::{Table, settings::{Style, Color, Modify, object::Rows}};
 use crate::helpers::{sort_versions_semver, filter_versions, format_relative_time, format_timestamp};
-use crate::output::{PackageSummaryRow, VersionRow};
+use crate::output::{PackageSummaryRow, PackageSetRow, VersionRow};
 
 /// Searches for package in database
 pub fn cmd_search(
@@ -69,11 +70,19 @@ pub fn cmd_search(
             }
         }
     } else {
-        // Use prefix search - finds exact match AND packages with the same prefix
-        let matches = db.search_packages(&attr_name)?;
+        // Phase 1: fast prefix scan ("python" → python311, python314, …)
+        let mut matches = db.search_packages(&attr_name)?;
+        let mut used_substring = false;
+
+        // Phase 2: substring fallback ("biomejs" → vscode-extensions.biomejs.biome, etc.)
+        if matches.is_empty() {
+            matches = db.search_packages_contains(&attr_name)?;
+            used_substring = true;
+        }
 
         if matches.is_empty() {
-            println!("{} No versions found for package '{}'", "❌".red(), attr_name.bold());
+            println!("{} No packages found matching '{}'", "❌".red(), attr_name.bold());
+            println!("  {} Try a different spelling or a broader term", "💡".yellow());
             return Ok(());
         }
 
@@ -107,7 +116,7 @@ pub fn cmd_search(
         }
 
         // Show grouped summary for all matching packages
-        return display_multiple_packages(&attr_name, matches);
+        return display_multiple_packages(&attr_name, matches, limit, used_substring);
     }
 
     Ok(())
@@ -168,27 +177,78 @@ fn display_single_package(
     Ok(())
 }
 
-/// Displays a grouped summary table when multiple packages match
+/// Extracts the top-level namespace (package set) from an attr_name.
+///
+/// Examples:
+///   "vscode-extensions.biomejs.biome" → "vscode-extensions"
+///   "python313Packages.numpy"          → "python313Packages"
+///   "python314"                        → "(top-level)"
+fn attr_namespace(attr_name: &str) -> &str {
+    match attr_name.find('.') {
+        Some(pos) => &attr_name[..pos],
+        None => "(top-level)",
+    }
+}
+
+/// Displays a grouped summary table when multiple packages match.
+/// Shows a package-set breakdown (like NixOS search sidebar) followed by
+/// a paginated alphabetical package list.
 fn display_multiple_packages(
     query: &str,
-    matches: std::collections::HashMap<String, Vec<archiver_core::PackageEntry>>,
+    matches: HashMap<String, Vec<archiver_core::PackageEntry>>,
+    limit: usize,
+    used_substring: bool,
 ) -> Result<()> {
-    // Sort package names alphabetically
     let mut names: Vec<String> = matches.keys().cloned().collect();
     names.sort();
 
-    println!("\n{} {}",
-        "🔍".bright_cyan(),
-        format!("Packages matching '{}'", query).bold().bright_white()
-    );
-    println!("{}", "━".repeat(60).bright_black());
-    println!("  {} {}",
-        "Found:".bright_yellow(),
-        format!("{} packages", names.len()).bold()
-    );
-    println!();
+    let total = names.len();
+    let display_limit = limit.min(total);
 
-    let rows: Vec<PackageSummaryRow> = names.iter().map(|name| {
+    let mode_tag = if used_substring {
+        "substring".bright_yellow()
+    } else {
+        "prefix".bright_cyan()
+    };
+
+    println!("\n{} {}  {} {}",
+        "🔍".bright_cyan(),
+        format!("Showing 1-{} of {} packages matching '{}'", display_limit, total, query)
+            .bold().bright_white(),
+        "mode:".dimmed(),
+        mode_tag,
+    );
+    println!("{}", "━".repeat(70).bright_black());
+
+    // ── Package sets breakdown (mirrors NixOS search sidebar) ──────────────
+    let mut set_counts: HashMap<&str, usize> = HashMap::new();
+    for name in &names {
+        *set_counts.entry(attr_namespace(name)).or_insert(0) += 1;
+    }
+    let mut set_names: Vec<&str> = set_counts.keys().cloned().collect();
+    set_names.sort_by(|a, b| {
+        let ca = set_counts[a];
+        let cb = set_counts[b];
+        if *a == "(top-level)" { return std::cmp::Ordering::Less; }
+        if *b == "(top-level)" { return std::cmp::Ordering::Greater; }
+        cb.cmp(&ca).then(a.cmp(b))
+    });
+
+    if set_names.len() > 1 || set_names.first().is_some_and(|s| *s != "(top-level)") {
+        println!("\n{}", "📦 Package sets:".bright_cyan());
+        let set_rows: Vec<PackageSetRow> = set_names.iter().map(|s| PackageSetRow {
+            set: s.to_string(),
+            packages: set_counts[s].to_string(),
+        }).collect();
+        let mut set_table = Table::new(set_rows);
+        set_table.with(Style::rounded())
+            .with(Modify::new(Rows::first()).with(Color::FG_BRIGHT_CYAN));
+        println!("{}", set_table);
+        println!();
+    }
+
+    // ── Package list ────────────────────────────────────────────────────────
+    let rows: Vec<PackageSummaryRow> = names.iter().take(display_limit).map(|name| {
         let entries = &matches[name];
         let sorted = sort_versions_semver(entries.clone());
         let newest = sorted.first().unwrap();
@@ -203,10 +263,19 @@ fn display_multiple_packages(
     let mut table = Table::new(rows);
     table.with(Style::rounded()).with(Modify::new(Rows::first()).with(Color::FG_BRIGHT_CYAN));
     println!("{}", table);
+
+    if display_limit < total {
+        println!("\n  {} {} more packages not shown (use {} to increase the limit)",
+            "...".dimmed(),
+            (total - display_limit).to_string().bold(),
+            "--limit N".bright_cyan(),
+        );
+    }
+
     println!(
         "\n  {} Run {} for details on a specific package",
         "💡".yellow(),
-        format!("search <name>", ).bright_cyan()
+        "search <name>".bright_cyan()
     );
     Ok(())
 }

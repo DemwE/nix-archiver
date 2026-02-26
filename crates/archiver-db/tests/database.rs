@@ -131,6 +131,44 @@ fn test_search_packages_exact_name() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_search_packages_contains_substring() -> Result<()> {
+    let tmp = TempDir::new()?;
+    let db = ArchiverDb::open(tmp.path())?;
+
+    let biome = PackageEntry::new(
+        "vscode-extensions.biomejs.biome".to_string(), "2025.10.0".to_string(),
+        SHA1.to_string(), NAR.to_string(), 1000,
+    );
+    let ruff = PackageEntry::new(
+        "vscode-extensions.charliermarsh.ruff".to_string(), "2024.1.0".to_string(),
+        SHA2.to_string(), NAR.to_string(), 2000,
+    );
+    let node = PackageEntry::new(
+        "nodejs".to_string(), "20.0.0".to_string(),
+        SHA_NEW.to_string(), NAR.to_string(), 3000,
+    );
+    db.insert_if_better(&biome)?;
+    db.insert_if_better(&ruff)?;
+    db.insert_if_better(&node)?;
+
+    // "biomejs" is NOT a key prefix but IS a substring of the attr_name
+    let r1 = db.search_packages_contains("biomejs")?;
+    assert_eq!(r1.len(), 1);
+    assert!(r1.contains_key("vscode-extensions.biomejs.biome"));
+    assert!(!r1.contains_key("nodejs"));
+
+    // "vscode-extensions" matches both extensions
+    let r2 = db.search_packages_contains("vscode-extensions")?;
+    assert_eq!(r2.len(), 2);
+
+    // Case-insensitive
+    let r3 = db.search_packages_contains("BIOMEJS")?;
+    assert_eq!(r3.len(), 1);
+
+    Ok(())
+}
+
 // ── commit tracking ──────────────────────────────────────────────────────────
 
 #[test]

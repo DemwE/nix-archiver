@@ -27,3 +27,12 @@ pub struct PackageSummaryRow {
     #[tabled(rename = "Date")]
     pub latest_date: String,
 }
+
+/// Table row for the package-set breakdown sidebar (mirrors NixOS search)
+#[derive(Tabled)]
+pub struct PackageSetRow {
+    #[tabled(rename = "Package set")]
+    pub set: String,
+    #[tabled(rename = "Packages")]
+    pub packages: String,
+}
