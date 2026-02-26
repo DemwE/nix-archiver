@@ -22,9 +22,16 @@ fn format_size(bytes: u64) -> String {
 
 /// Displays database statistics
 pub fn cmd_stats(db: ArchiverDb) -> Result<()> {
-    let size = db.db_size_bytes();
+    let size     = db.db_size_bytes();
+    let packages = db.unique_package_count();
+    let versions = db.version_count();
     println!("{}", "Database Statistics:".bright_cyan().bold());
-    println!("  {}: {}", "Packages".bright_yellow(),          db.package_count().to_string().bold());
+    println!("  {}: {}  {} {}",
+        "Packages".bright_yellow(),
+        packages.to_string().bold(),
+        "versions:".dimmed(),
+        versions.to_string().bold(),
+    );
     println!("  {}: {}", "Processed commits".bright_yellow(), db.processed_commit_count().to_string().bold());
     println!("  {}: {}", "Database size".bright_yellow(),     format_size(size).bold());
     Ok(())

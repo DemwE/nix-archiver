@@ -253,9 +253,23 @@ impl ArchiverDb {
         Ok(self.processed_commits.contains_key(commit_sha.as_bytes())?)
     }
 
-    /// Returns the number of stored packages
-    pub fn package_count(&self) -> usize {
+    /// Returns the total number of stored (attr_name, version) entries.
+    pub fn version_count(&self) -> usize {
         self.packages.len()
+    }
+
+    /// Returns the number of distinct package attr_names.
+    /// Scans only keys (no value deserialization) for performance.
+    pub fn unique_package_count(&self) -> usize {
+        let mut seen = std::collections::HashSet::new();
+        for item in self.packages.iter().keys() {
+            if let Ok(key) = item {
+                // key format: "attr_name:version" — take bytes before first ':'
+                let pos = key.iter().position(|&b| b == b':').unwrap_or(key.len());
+                seen.insert(key[..pos].to_vec());
+            }
+        }
+        seen.len()
     }
 
     /// Checks if database is empty (no packages indexed yet)
