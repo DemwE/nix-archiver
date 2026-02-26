@@ -3,6 +3,7 @@
 use archiver_core::PackageEntry;
 use anyhow::{Context, Result};
 use sled::Db;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Main structure managing the database
@@ -120,6 +121,27 @@ impl ArchiverDb {
 
         // Sort by timestamp (newest first)
         results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        Ok(results)
+    }
+
+    /// Searches packages by prefix across all attr_names.
+    /// e.g. query "python" matches python27, python311, python312, python313, ...
+    /// Returns a map of attr_name → list of versions (sorted newest first).
+    pub fn search_packages(&self, query: &str) -> Result<HashMap<String, Vec<PackageEntry>>> {
+        let mut results: HashMap<String, Vec<PackageEntry>> = HashMap::new();
+
+        for item in self.packages.scan_prefix(query.as_bytes()) {
+            let (_, value) = item.context("Failed to read from database")?;
+            let entry: PackageEntry = serde_json::from_slice(&value)
+                .context("Failed to deserialize PackageEntry")?;
+            results.entry(entry.attr_name.clone()).or_default().push(entry);
+        }
+
+        // Sort each group by timestamp (newest first)
+        for entries in results.values_mut() {
+            entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        }
+
         Ok(results)
     }
 

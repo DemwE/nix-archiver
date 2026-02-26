@@ -5,7 +5,7 @@ use git2::{Oid, Repository};
 use regex::Regex;
 
 use crate::nar::compute_nar_hash_for_blob;
-use crate::parsers::extract_package_info_static;
+use crate::parsers::extract_packages_from_file;
 use crate::stats::CommitStats;
 
 /// Helper function to process a single file (shared between diff and tree walk)
@@ -32,8 +32,11 @@ pub(super) fn process_file(
             };
             
             if let Ok(content) = std::str::from_utf8(blob.content()) {
-                // Try to extract package information
-                if let Some(package_info) = extract_package_info_static(full_path, content, version_regex, nar_hash) {
+                // Extract all packages from this file (may be multiple)
+                let nar_hash_str = nar_hash.as_deref();
+                let packages = extract_packages_from_file(full_path, content, version_regex, nar_hash_str);
+                
+                for package_info in packages {
                     stats.packages_found += 1;
 
                     let entry = PackageEntry::new(

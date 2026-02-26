@@ -14,3 +14,16 @@ pub struct VersionRow {
     #[tabled(rename = "NAR Hash")]
     pub nar_hash: String,
 }
+
+/// Table row for displaying a package summary across multiple packages
+#[derive(Tabled)]
+pub struct PackageSummaryRow {
+    #[tabled(rename = "Package")]
+    pub attr_name: String,
+    #[tabled(rename = "Versions")]
+    pub version_count: String,
+    #[tabled(rename = "Latest")]
+    pub latest_version: String,
+    #[tabled(rename = "Date")]
+    pub latest_date: String,
+}

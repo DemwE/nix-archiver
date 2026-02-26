@@ -35,3 +35,6 @@ nixpkgs/
 
 # Keep Cargo.lock for reproducible builds
 # !Cargo.lock is tracked by git
+
+# Logs
+*.log

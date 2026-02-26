@@ -21,3 +21,5 @@ semver = { workspace = true }
 rayon = { workspace = true }
 chrono = { workspace = true }
 nix-nar = { workspace = true }
+rnix = { workspace = true }
+rowan = { workspace = true }

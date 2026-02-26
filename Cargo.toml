@@ -54,6 +54,10 @@ tabled = "0.20.0"
 chrono = "0.4.44"
 colored = "2.1.0"
 
+# Nix parsing
+rnix = "0.14.0"
+rowan = "0.16"
+
 # Testing
 tempfile = "3.26.0"
 regex = "1.12.3"
