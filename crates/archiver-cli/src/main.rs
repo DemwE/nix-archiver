@@ -14,7 +14,7 @@ use archiver_db::ArchiverDb;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use commands::{cmd_index, cmd_search, cmd_generate, cmd_stats, cmd_prefetch_hashes};
+use commands::{cmd_index, cmd_search, cmd_generate, cmd_stats};
 
 #[derive(Parser)]
 #[command(name = "nix-archiver")]
@@ -118,23 +118,6 @@ enum Commands {
 
     /// Show database statistics
     Stats,
-
-    /// Fetch and cache nixpkgs tarball sha256 for each indexed commit.
-    /// After running this, `generate` will produce fully pinned fetchTarball
-    /// expressions with sha256 — no local nixpkgs needed at evaluation time.
-    PrefetchHashes {
-        /// Maximum number of commits to fetch (default: all pending)
-        #[arg(short, long)]
-        limit: Option<usize>,
-
-        /// Re-fetch even if a hash is already stored
-        #[arg(long)]
-        force: bool,
-
-        /// Number of parallel nix-prefetch-url invocations (default: 4)
-        #[arg(short, long, default_value = "4")]
-        jobs: usize,
-    },
 }
 
 fn main() -> Result<()> {
@@ -162,9 +145,7 @@ fn main() -> Result<()> {
         Commands::Stats => {
             cmd_stats(db)?;
         }
-        Commands::PrefetchHashes { limit, force, jobs } => {
-            cmd_prefetch_hashes(limit, force, jobs, db)?;
-        }
+
     }
 
     Ok(())

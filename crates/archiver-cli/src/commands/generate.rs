@@ -198,7 +198,7 @@ pub fn cmd_generate(input: PathBuf, output: PathBuf, nixpkgs: Option<PathBuf>, d
         }
     }
 
-    let nixpkgs_var = |commit: &str| format!("nixpkgs_{}", &commit[..12]);
+    let nixpkgs_var = |commit: &str| format!("nixpkgs_{}", commit);
 
     // Build the Nix source expression for a given commit:
     //  1. --nixpkgs <path>  → builtins.fetchGit file:// (local bare repo, offline)
