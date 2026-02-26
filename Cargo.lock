@@ -92,6 +92,8 @@ dependencies = [
  "log",
  "rayon",
  "regex",
+ "rnix",
+ "rowan",
  "semver",
  "strsim",
  "tabled",

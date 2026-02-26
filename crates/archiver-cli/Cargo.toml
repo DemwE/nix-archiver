@@ -26,6 +26,8 @@ rayon = { workspace = true }
 colored = { workspace = true }
 semver = { workspace = true }
 regex = { workspace = true }
+rnix = { workspace = true }
+rowan = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
