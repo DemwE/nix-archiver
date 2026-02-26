@@ -81,6 +81,10 @@ pub struct ArchiverDb {
     /// Tree tracking processed commits
     processed_commits: sled::Tree,
 
+    /// Tree storing nixpkgs tarball sha256 per commit
+    /// key: commit_sha hex string, value: hash string as returned by nix-prefetch-url
+    tarball_hashes: sled::Tree,
+
     /// Sled database instance
     db: Db,
 
@@ -101,10 +105,15 @@ impl ArchiverDb {
         let processed_commits = db
             .open_tree("processed_commits")
             .context("Failed to open processed_commits tree")?;
+
+        let tarball_hashes = db
+            .open_tree("tarball_hashes")
+            .context("Failed to open tarball_hashes tree")?;
         
         Ok(Self {
             packages,
             processed_commits,
+            tarball_hashes,
             db,
             path: path.as_ref().to_path_buf(),
         })
@@ -297,6 +306,50 @@ impl ArchiverDb {
             }).sum()
         }
         dir_size(&self.path)
+    }
+
+    // -----------------------------------------------------------------------
+    // Tarball hash store (per-commit nixpkgs sha256 for use in fetchTarball)
+    // -----------------------------------------------------------------------
+
+    /// Stores the nixpkgs tarball hash for a given commit.
+    /// `hash` is the string returned by `nix-prefetch-url --unpack`.
+    pub fn store_tarball_hash(&self, commit_sha: &str, hash: &str) -> Result<()> {
+        self.tarball_hashes
+            .insert(commit_sha.as_bytes(), hash.as_bytes())
+            .context("Failed to store tarball hash")?;
+        Ok(())
+    }
+
+    /// Retrieves the stored nixpkgs tarball hash for a commit, if any.
+    pub fn get_tarball_hash(&self, commit_sha: &str) -> Result<Option<String>> {
+        match self.tarball_hashes.get(commit_sha.as_bytes())? {
+            Some(bytes) => {
+                let s = String::from_utf8(bytes.to_vec())
+                    .context("Tarball hash contains invalid UTF-8")?;
+                Ok(Some(s))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Returns the number of commits with a stored tarball hash.
+    pub fn tarball_hash_count(&self) -> usize {
+        self.tarball_hashes.len()
+    }
+
+    /// Returns all unique commit SHAs found in the packages tree.
+    /// Used by `prefetch-hashes` to know which commits to fetch.
+    pub fn all_unique_commits(&self) -> Result<Vec<String>> {
+        let mut seen = std::collections::HashSet::new();
+        for item in self.packages.iter() {
+            let (_, value) = item.context("Failed to read from database")?;
+            let entry = unpack(&value).context("Failed to deserialize PackageEntry")?;
+            seen.insert(entry.commit_sha);
+        }
+        let mut commits: Vec<String> = seen.into_iter().collect();
+        commits.sort();
+        Ok(commits)
     }
 
     /// Flushes all pending operations to disk

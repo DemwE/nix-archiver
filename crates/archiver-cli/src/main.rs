@@ -14,7 +14,7 @@ use archiver_db::ArchiverDb;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use commands::{cmd_index, cmd_search, cmd_generate, cmd_stats};
+use commands::{cmd_index, cmd_search, cmd_generate, cmd_stats, cmd_prefetch_hashes};
 
 #[derive(Parser)]
 #[command(name = "nix-archiver")]
@@ -108,10 +108,33 @@ enum Commands {
         /// Output frozen.nix file
         #[arg(short, long)]
         output: PathBuf,
+
+        /// Path to a local nixpkgs bare git repo (e.g. /data/nixpkgs.git).
+        /// When provided, frozen.nix will use builtins.fetchGit with a local
+        /// file:// URL instead of fetching from GitHub — fully offline.
+        #[arg(long)]
+        nixpkgs: Option<PathBuf>,
     },
 
     /// Show database statistics
     Stats,
+
+    /// Fetch and cache nixpkgs tarball sha256 for each indexed commit.
+    /// After running this, `generate` will produce fully pinned fetchTarball
+    /// expressions with sha256 — no local nixpkgs needed at evaluation time.
+    PrefetchHashes {
+        /// Maximum number of commits to fetch (default: all pending)
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Re-fetch even if a hash is already stored
+        #[arg(long)]
+        force: bool,
+
+        /// Number of parallel nix-prefetch-url invocations (default: 4)
+        #[arg(short, long, default_value = "4")]
+        jobs: usize,
+    },
 }
 
 fn main() -> Result<()> {
@@ -133,11 +156,14 @@ fn main() -> Result<()> {
         Commands::Search { attr_name, version, limit, major, pattern, since, all } => {
             cmd_search(attr_name, version, limit, major, pattern, since, all, db)?;
         }
-        Commands::Generate { input, output } => {
-            cmd_generate(input, output, db)?;
+        Commands::Generate { input, output, nixpkgs } => {
+            cmd_generate(input, output, nixpkgs, db)?;
         }
         Commands::Stats => {
             cmd_stats(db)?;
+        }
+        Commands::PrefetchHashes { limit, force, jobs } => {
+            cmd_prefetch_hashes(limit, force, jobs, db)?;
         }
     }
 

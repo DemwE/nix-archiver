@@ -53,22 +53,21 @@ impl PackageEntry {
         format!("{}:{}", self.attr_name, self.version)
     }
 
-    /// Generates a `fetchTarball` block in Nix format
+    /// Generates a `fetchTarball` expression in Nix format.
+    ///
+    /// Note: sha256 is intentionally omitted. The hash stored in the database is
+    /// the NAR hash of the individual package file, NOT the sha256 of the entire
+    /// nixpkgs tarball that `fetchTarball` requires. The commit SHA alone is
+    /// sufficient to pin the exact version — Nix caches by URL.
     ///
     /// Example output:
     /// ```nix
-    /// fetchTarball {
-    ///   url = "https://github.com/NixOS/nixpkgs/archive/abc123.tar.gz";
-    ///   sha256 = "sha256-...";
-    /// }
+    /// fetchTarball "https://github.com/NixOS/nixpkgs/archive/abc123.tar.gz"
     /// ```
     pub fn to_nix_fetchtarball(&self) -> String {
         format!(
-            r#"fetchTarball {{
-  url = "https://github.com/NixOS/nixpkgs/archive/{}.tar.gz";
-  sha256 = "{}";
-}}"#,
-            self.commit_sha, self.nar_hash
+            r#"fetchTarball "https://github.com/NixOS/nixpkgs/archive/{}.tar.gz""#,
+            self.commit_sha
         )
     }
 
