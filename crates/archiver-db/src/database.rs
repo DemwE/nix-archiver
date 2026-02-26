@@ -77,12 +77,15 @@ fn unpack(bytes: &[u8]) -> Result<PackageEntry> {
 pub struct ArchiverDb {
     /// Tree storing package entries (key: "attr_name:version")
     packages: sled::Tree,
-    
+
     /// Tree tracking processed commits
     processed_commits: sled::Tree,
-    
+
     /// Sled database instance
     db: Db,
+
+    /// Path to the database directory (for size calculation)
+    path: std::path::PathBuf,
 }
 
 impl ArchiverDb {
@@ -103,6 +106,7 @@ impl ArchiverDb {
             packages,
             processed_commits,
             db,
+            path: path.as_ref().to_path_buf(),
         })
     }
 
@@ -262,6 +266,23 @@ impl ArchiverDb {
     /// Returns the number of processed commits
     pub fn processed_commit_count(&self) -> usize {
         self.processed_commits.len()
+    }
+
+    /// Returns total on-disk size of the database directory in bytes.
+    /// Sums sizes of all files inside the sled directory recursively.
+    pub fn db_size_bytes(&self) -> u64 {
+        fn dir_size(path: &std::path::Path) -> u64 {
+            let Ok(entries) = std::fs::read_dir(path) else { return 0; };
+            entries.flatten().map(|e| {
+                let p = e.path();
+                if p.is_dir() {
+                    dir_size(&p)
+                } else {
+                    e.metadata().map(|m| m.len()).unwrap_or(0)
+                }
+            }).sum()
+        }
+        dir_size(&self.path)
     }
 
     /// Flushes all pending operations to disk
