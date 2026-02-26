@@ -31,7 +31,7 @@ packages.nix
 overlay.nix
 
 # Nixpkgs repository (local clone for testing)
-nixpkgs/
+nixpkgs*
 
 # Keep Cargo.lock for reproducible builds
 # !Cargo.lock is tracked by git

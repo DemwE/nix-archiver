@@ -106,7 +106,7 @@ enum Commands {
         input: PathBuf,
 
         /// Output frozen.nix file
-        #[arg(short, long)]5555
+        #[arg(short, long)]
         output: PathBuf,
 
         /// Path to a local nixpkgs bare git repo (e.g. /data/nixpkgs.git).
