@@ -143,15 +143,29 @@ fn extract_mktplcref(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<&str>
             continue;
         }
 
-        let Some(Expr::AttrSet(ref_set)) = kv.value() else { continue };
+        // mktplcRef value can be:
+        //   { name=…; publisher=…; version=…; } (biome-style)
+        //   let sources = {…}; in { name=…; version=…; } // sources.${…} (ruff-style)
+        let Some(value) = kv.value() else { continue };
+        let Some(ref_set) = unwrap_to_attrset(value) else { continue };
 
         // Extract version from the mktplcRef attrset
-        let version = extract_string_binding(&ref_set, "version")?;
+        let version = match extract_string_binding(&ref_set, "version") {
+            Some(v) => v,
+            None => continue,
+        };
 
-        // Package name: prefer "name" from mktplcRef, else pname, else path
-        let attr_name = extract_string_binding(&ref_set, "name")
-            .or_else(|| find_pname_in_tree(root))
-            .or_else(|| path_to_attr_name(path))?;
+        // Build "vscode-extensions.publisher.name" attr_name to match the
+        // actual nixpkgs attribute path (pkgs.vscode-extensions.biomejs.biome).
+        // Falls back to path-derived name if publisher/name bindings are absent.
+        let publisher = extract_string_binding(&ref_set, "publisher");
+        let name = extract_string_binding(&ref_set, "name");
+        let attr_name = match (publisher, name) {
+            (Some(p), Some(n)) => format!("vscode-extensions.{}.{}", p, n),
+            (None, Some(n)) => format!("vscode-extensions.{}", n),
+            _ => path_to_attr_name(path)
+                .or_else(|| find_pname_in_tree(root))?,
+        };
 
         return Some(PackageInfo {
             attr_name,
@@ -161,6 +175,26 @@ fn extract_mktplcref(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<&str>
     }
 
     None
+}
+
+/// Extracts the innermost AttrSet from an expression, handling:
+/// - Direct: `{ … }`
+/// - Let-in: `let … in { … }`
+/// - BinOp `//` merge: `{ … } // extra` (returns left-hand attrset)
+fn unwrap_to_attrset(expr: Expr) -> Option<ast::AttrSet> {
+    match expr {
+        Expr::AttrSet(s) => Some(s),
+        Expr::LetIn(let_in) => {
+            let body = let_in.body()?;
+            unwrap_to_attrset(body)
+        }
+        Expr::BinOp(binop) => {
+            // `lhs // rhs` — the version/name/publisher live in the lhs attrset
+            let lhs = binop.lhs()?;
+            unwrap_to_attrset(lhs)
+        }
+        _ => None,
+    }
 }
 
 // ─── Strategy 3 – single package (pname + version) ───────────────────────────

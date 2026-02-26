@@ -26,3 +26,6 @@ rayon = { workspace = true }
 colored = { workspace = true }
 semver = { workspace = true }
 regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

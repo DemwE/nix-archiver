@@ -2,39 +2,63 @@
 
 use archiver_index::nar::compute_nar_hash_for_blob;
 
+// ── format ────────────────────────────────────────────────────────────────────
+
 #[test]
-fn test_nar_hash_computation() {
-    // Test with simple content
+fn test_nar_hash_sri_format() {
+    let hash = compute_nar_hash_for_blob(b"Hello, Nix!").unwrap();
+    // Must start with "sha256-"
+    assert!(hash.starts_with("sha256-"), "unexpected prefix: {}", hash);
+    // SHA256 base64 = 44 chars; total = 7 + 44 = 51
+    assert_eq!(hash.len(), 51, "unexpected hash length: {}", hash);
+}
+
+// ── determinism ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_nar_hash_is_deterministic() {
     let content = b"Hello, Nix!";
-    let hash = compute_nar_hash_for_blob(content).unwrap();
-    
-    // Verify format: sha256-<base64>
-    assert!(hash.starts_with("sha256-"));
-    assert!(hash.len() > 10); // Base64 encoding of SHA256 should be 44 chars + prefix
-    
-    // Test with empty file
-    let empty_hash = compute_nar_hash_for_blob(b"").unwrap();
-    assert!(empty_hash.starts_with("sha256-"));
-    
-    // Same content should produce same hash
-    let hash2 = compute_nar_hash_for_blob(content).unwrap();
-    assert_eq!(hash, hash2);
-    
-    // Different content should produce different hash
-    let different_hash = compute_nar_hash_for_blob(b"Different content").unwrap();
-    assert_ne!(hash, different_hash);
+    let h1 = compute_nar_hash_for_blob(content).unwrap();
+    let h2 = compute_nar_hash_for_blob(content).unwrap();
+    assert_eq!(h1, h2);
 }
 
 #[test]
-fn test_nar_hash_with_various_sizes() {
-    // Test with content that doesn't need padding
-    let content_8_bytes = b"12345678";
-    let hash1 = compute_nar_hash_for_blob(content_8_bytes).unwrap();
-    assert!(hash1.starts_with("sha256-"));
-    
-    // Test with content that needs padding (not multiple of 8)
-    let content_5_bytes = b"12345";
-    let hash2 = compute_nar_hash_for_blob(content_5_bytes).unwrap();
-    assert!(hash2.starts_with("sha256-"));
-    assert_ne!(hash1, hash2);
+fn test_nar_hash_differs_for_different_content() {
+    let h1 = compute_nar_hash_for_blob(b"content_a").unwrap();
+    let h2 = compute_nar_hash_for_blob(b"content_b").unwrap();
+    assert_ne!(h1, h2);
+}
+
+// ── padding ───────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_nar_hash_empty_file() {
+    // Empty file is valid and produces a stable, non-empty hash.
+    let hash = compute_nar_hash_for_blob(b"").unwrap();
+    assert!(hash.starts_with("sha256-"));
+    assert_eq!(hash.len(), 51);
+}
+
+#[test]
+fn test_nar_hash_content_not_multiple_of_8() {
+    // 5 bytes – requires padding, must still produce a valid hash
+    let hash = compute_nar_hash_for_blob(b"12345").unwrap();
+    assert!(hash.starts_with("sha256-"));
+    assert_eq!(hash.len(), 51);
+}
+
+#[test]
+fn test_nar_hash_content_exactly_8_bytes() {
+    // 8 bytes – no padding needed
+    let hash = compute_nar_hash_for_blob(b"12345678").unwrap();
+    assert!(hash.starts_with("sha256-"));
+    assert_eq!(hash.len(), 51);
+}
+
+#[test]
+fn test_nar_hash_different_sizes_produce_different_hashes() {
+    let h5 = compute_nar_hash_for_blob(b"12345").unwrap();
+    let h8 = compute_nar_hash_for_blob(b"12345678").unwrap();
+    assert_ne!(h5, h8);
 }

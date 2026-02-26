@@ -95,6 +95,7 @@ dependencies = [
  "semver",
  "strsim",
  "tabled",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
