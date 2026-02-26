@@ -17,10 +17,7 @@ pub struct PackageEntry {
     
     /// Commit SHA in Nixpkgs
     pub commit_sha: String,
-    
-    /// NAR hash in SRI format (e.g., "sha256-...")
-    pub nar_hash: String,
-    
+
     /// Commit timestamp (Unix epoch)
     pub timestamp: u64,
     
@@ -34,14 +31,12 @@ impl PackageEntry {
         attr_name: String,
         version: String,
         commit_sha: String,
-        nar_hash: String,
         timestamp: u64,
     ) -> Self {
         Self {
             attr_name,
             version,
             commit_sha,
-            nar_hash,
             timestamp,
             is_primary: true,
         }
@@ -54,16 +49,6 @@ impl PackageEntry {
     }
 
     /// Generates a `fetchTarball` expression in Nix format.
-    ///
-    /// Note: sha256 is intentionally omitted. The hash stored in the database is
-    /// the NAR hash of the individual package file, NOT the sha256 of the entire
-    /// nixpkgs tarball that `fetchTarball` requires. The commit SHA alone is
-    /// sufficient to pin the exact version — Nix caches by URL.
-    ///
-    /// Example output:
-    /// ```nix
-    /// fetchTarball "https://github.com/NixOS/nixpkgs/archive/abc123.tar.gz"
-    /// ```
     pub fn to_nix_fetchtarball(&self) -> String {
         format!(
             r#"fetchTarball "https://github.com/NixOS/nixpkgs/archive/{}.tar.gz""#,
@@ -96,11 +81,10 @@ impl fmt::Display for PackageEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} {} @ {} ({})",
+            "{} {} @ {}",
             self.attr_name,
             self.version,
-            &self.commit_sha[..8],
-            self.nar_hash
+            &self.commit_sha[..8]
         )
     }
 }

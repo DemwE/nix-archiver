@@ -18,7 +18,7 @@ const NON_PACKAGE_KEYS: &[&str] = &[
 
 /// Parses a .nix file using rnix AST and returns all packages found.
 /// Returns empty Vec on parse failure (caller should use regex fallback).
-pub fn extract_packages_ast(path: &str, content: &str, nar_hash: Option<&str>) -> Vec<PackageInfo> {
+pub fn extract_packages_ast(path: &str, content: &str) -> Vec<PackageInfo> {
     let parsed = rnix::Root::parse(content);
 
     if !parsed.errors().is_empty() {
@@ -34,20 +34,18 @@ pub fn extract_packages_ast(path: &str, content: &str, nar_hash: Option<&str>) -
 
     // Strategy 1: multi-package files (e.g. python/default.nix)
     //   python311 = callPackage ./cpython { sourceVersion = { major="3"; … }; };
-    let multi = extract_multi_callpackage(root.syntax(), nar_hash);
+    let multi = extract_multi_callpackage(root.syntax());
     if !multi.is_empty() {
         log::debug!("[AST] multi-package '{}': {} package(s)", path, multi.len());
         return multi;
     }
 
-    // Strategy 2: single-package with mktplcRef (VSCode extensions)
-    if let Some(pkg) = extract_mktplcref(root.syntax(), path, nar_hash) {
+    if let Some(pkg) = extract_mktplcref(root.syntax(), path) {
         log::debug!("[AST] mktplcRef '{}': {}", path, pkg.attr_name);
         return vec![pkg];
     }
 
-    // Strategy 3: single-package with pname + version (most common)
-    if let Some(pkg) = extract_single_package(root.syntax(), path, nar_hash) {
+    if let Some(pkg) = extract_single_package(root.syntax(), path) {
         log::debug!("[AST] single-package '{}': {} v{}", path, pkg.attr_name, pkg.version);
         return vec![pkg];
     }
@@ -57,7 +55,7 @@ pub fn extract_packages_ast(path: &str, content: &str, nar_hash: Option<&str>) -
 
 // ─── Strategy 1 – multi-package (callPackage + sourceVersion) ────────────────
 
-fn extract_multi_callpackage(root: &rnix::SyntaxNode, nar_hash: Option<&str>) -> Vec<PackageInfo> {
+fn extract_multi_callpackage(root: &rnix::SyntaxNode) -> Vec<PackageInfo> {
     let mut result = Vec::new();
 
     for node in root.descendants() {
@@ -87,7 +85,6 @@ fn extract_multi_callpackage(root: &rnix::SyntaxNode, nar_hash: Option<&str>) ->
             result.push(PackageInfo {
                 attr_name: key,
                 version,
-                nar_hash: nar_hash.map(String::from),
             });
         }
     }
@@ -135,7 +132,7 @@ fn extract_version_from_attrset_bindings(set: &ast::AttrSet) -> Option<String> {
 
 // ─── Strategy 2 – mktplcRef (VSCode extensions) ──────────────────────────────
 
-fn extract_mktplcref(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<&str>) -> Option<PackageInfo> {
+fn extract_mktplcref(root: &rnix::SyntaxNode, path: &str) -> Option<PackageInfo> {
     for node in root.descendants() {
         let Some(kv) = AttrpathValue::cast(node) else { continue };
 
@@ -170,7 +167,6 @@ fn extract_mktplcref(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<&str>
         return Some(PackageInfo {
             attr_name,
             version,
-            nar_hash: nar_hash.map(String::from),
         });
     }
 
@@ -199,7 +195,7 @@ fn unwrap_to_attrset(expr: Expr) -> Option<ast::AttrSet> {
 
 // ─── Strategy 3 – single package (pname + version) ───────────────────────────
 
-fn extract_single_package(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<&str>) -> Option<PackageInfo> {
+fn extract_single_package(root: &rnix::SyntaxNode, path: &str) -> Option<PackageInfo> {
     // Collect a flat map of all simple string bindings in the file.
     // This gives us major/minor/patch/suffix and similar vars for interpolation.
     let vars = collect_string_vars(root);
@@ -214,7 +210,6 @@ fn extract_single_package(root: &rnix::SyntaxNode, path: &str, nar_hash: Option<
     Some(PackageInfo {
         attr_name,
         version,
-        nar_hash: nar_hash.map(String::from),
     })
 }
 

@@ -2,7 +2,7 @@
 
 use archiver_core::PackageEntry;
 use anyhow::{Context, Result};
-use data_encoding::{BASE64, HEXLOWER};
+use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
@@ -12,20 +12,18 @@ use std::path::Path;
 // Compact binary storage format
 // ---------------------------------------------------------------------------
 
-/// Internal representation stored in sled. Uses raw bytes for SHA fields,
-/// eliminating hex/base64 strings and JSON overhead.
+/// Internal representation stored in sled. Uses raw bytes for SHA,
+/// eliminating hex strings and JSON overhead.
 ///
 /// Byte savings per entry (typical):
 ///   commit_sha: 40-char hex string → [u8; 20]  (-20 bytes)
-///   nar_hash:   ~59-char SRI string → [u8; 32]  (-27 bytes)
 ///   JSON overhead (field names, punctuation) → 0 with bincode (-~50 bytes)
-///   Total saving: ~97 bytes per entry
+///   Total saving: ~70 bytes per entry
 #[derive(Serialize, Deserialize)]
 struct StoredEntry {
     attr_name: String,
     version: String,
     commit_sha: [u8; 20],
-    nar_hash: [u8; 32],
     timestamp: u64,
     is_primary: bool,
 }
@@ -38,21 +36,10 @@ fn pack(entry: &PackageEntry) -> Result<Vec<u8>> {
     let mut commit_bytes = [0u8; 20];
     commit_bytes.copy_from_slice(&sha_vec);
 
-    let b64 = entry
-        .nar_hash
-        .strip_prefix("sha256-")
-        .context("NAR hash missing 'sha256-' prefix")?;
-    let hash_vec = BASE64
-        .decode(b64.as_bytes())
-        .context("Invalid NAR hash base64 encoding")?;
-    let mut nar_bytes = [0u8; 32];
-    nar_bytes.copy_from_slice(&hash_vec);
-
     let stored = StoredEntry {
         attr_name: entry.attr_name.clone(),
         version: entry.version.clone(),
         commit_sha: commit_bytes,
-        nar_hash: nar_bytes,
         timestamp: entry.timestamp,
         is_primary: entry.is_primary,
     };
@@ -67,7 +54,6 @@ fn unpack(bytes: &[u8]) -> Result<PackageEntry> {
         attr_name: stored.attr_name,
         version: stored.version,
         commit_sha: HEXLOWER.encode(&stored.commit_sha),
-        nar_hash: format!("sha256-{}", BASE64.encode(&stored.nar_hash)),
         timestamp: stored.timestamp,
         is_primary: stored.is_primary,
     })

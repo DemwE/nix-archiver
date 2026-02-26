@@ -7,12 +7,16 @@
 //!
 //! Also covers version validation and path-to-attr-name helpers.
 
-use archiver_index::parsers::{extract_package_info_static, is_valid_version};
+use archiver_index::parsers::{extract_packages_from_file, is_valid_version};
 use regex::Regex;
 
-// Dummy regex used by the legacy wrapper (AST parser ignores it)
 fn ver_regex() -> Regex {
     Regex::new(r#"version\s*=\s*"([^"]+)""#).unwrap()
+}
+
+/// Extract exactly one package from a single-package .nix file.
+fn extract_one(path: &str, content: &str) -> Option<archiver_index::PackageInfo> {
+    extract_packages_from_file(path, content, &ver_regex()).into_iter().next()
 }
 
 // ── Strategy 3: simple pname + version ───────────────────────────────────────
@@ -26,9 +30,7 @@ fn test_ast_simple_pname_version() {
             version = "14.1.1";
         }
     "#;
-    let info = extract_package_info_static(
-        "pkgs/tools/text/ripgrep/default.nix", content, &ver_regex(), None,
-    ).unwrap();
+    let info = extract_one("pkgs/tools/text/ripgrep/default.nix", content).unwrap();
     assert_eq!(info.attr_name, "ripgrep");
     assert_eq!(info.version, "14.1.1");
 }
@@ -41,9 +43,7 @@ fn test_ast_fallback_to_path_when_no_pname() {
             version = "1.0.0";
         }
     "#;
-    let info = extract_package_info_static(
-        "pkgs/development/libraries/mylib/default.nix", content, &ver_regex(), None,
-    ).unwrap();
+    let info = extract_one("pkgs/development/libraries/mylib/default.nix", content).unwrap();
     assert_eq!(info.attr_name, "mylib");
     assert_eq!(info.version, "1.0.0");
 }
@@ -64,8 +64,8 @@ fn test_ast_interpolated_version() {
             version = "${major}.${minor}.${patch}";
         }
     "#;
-    let info = extract_package_info_static(
-        "pkgs/development/interpreters/cpython/default.nix", content, &ver_regex(), None,
+    let info = extract_one(
+        "pkgs/development/interpreters/cpython/default.nix", content,
     ).unwrap();
     assert_eq!(info.attr_name, "cpython");
     assert_eq!(info.version, "3.12.5");
@@ -86,9 +86,9 @@ fn test_ast_mktplcref_biome_style() {
             };
         }
     "#;
-    let info = extract_package_info_static(
+    let info = extract_one(
         "pkgs/applications/editors/vscode/extensions/biomejs.biome/default.nix",
-        content, &ver_regex(), None,
+        content,
     ).unwrap();
     assert_eq!(info.attr_name, "vscode-extensions.biomejs.biome");
     assert_eq!(info.version, "2025.10.241456");
@@ -115,9 +115,9 @@ fn test_ast_mktplcref_ruff_let_style() {
                 // sources."x86_64-linux";
         }
     "#;
-    let info = extract_package_info_static(
+    let info = extract_one(
         "pkgs/applications/editors/vscode/extensions/charliermarsh.ruff/default.nix",
-        content, &ver_regex(), None,
+        content,
     ).unwrap();
     assert_eq!(info.attr_name, "vscode-extensions.charliermarsh.ruff");
     assert_eq!(info.version, "2026.36.0");
@@ -137,10 +137,9 @@ fn test_ast_multi_package_sourceversion() {
             };
         }
     "#;
-    use archiver_index::parsers::extract_packages_from_file;
     let pkgs = extract_packages_from_file(
         "pkgs/development/interpreters/python/default.nix",
-        content, &ver_regex(), None,
+        content, &ver_regex(),
     );
     assert_eq!(pkgs.len(), 2);
     let names: Vec<&str> = pkgs.iter().map(|p| p.attr_name.as_str()).collect();

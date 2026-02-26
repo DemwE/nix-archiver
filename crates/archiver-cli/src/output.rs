@@ -11,8 +11,6 @@ pub struct VersionRow {
     pub commit: String,
     #[tabled(rename = "Date")]
     pub date: String,
-    #[tabled(rename = "NAR Hash")]
-    pub nar_hash: String,
 }
 
 /// Table row for displaying a package summary across multiple packages

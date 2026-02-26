@@ -27,7 +27,6 @@ pub fn cmd_search(
                 println!("{}", "━".repeat(60).bright_black());
                 println!("  {}    {}", "Commit:".bright_yellow(), entry.commit_sha);
                 println!("  {}      {}", "Date:".bright_yellow(), format_timestamp(entry.timestamp));
-                println!("  {}  {}", "NAR Hash:".bright_yellow(), entry.nar_hash);
                 println!("\n{}", "📝 Nix expression:".bright_cyan());
                 println!("{}", "━".repeat(60).bright_black());
                 println!("{}", entry.to_nix_import().bright_white());
@@ -46,11 +45,6 @@ pub fn cmd_search(
                             version: entry.version.clone(),
                             commit: entry.commit_sha.clone(),
                             date: format_relative_time(entry.timestamp),
-                            nar_hash: if entry.nar_hash == "unknown" { 
-                                "-".to_string()
-                            } else { 
-                                entry.nar_hash.clone()
-                            },
                         })
                         .collect();
                     
@@ -162,7 +156,6 @@ fn display_single_package(
         version: entry.version.clone(),
         commit: entry.commit_sha.clone(),
         date: format_relative_time(entry.timestamp),
-        nar_hash: if entry.nar_hash == "unknown" { "-".to_string() } else { entry.nar_hash.clone() },
     }).collect();
 
     let mut table = Table::new(rows);

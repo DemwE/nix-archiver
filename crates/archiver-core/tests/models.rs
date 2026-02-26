@@ -9,7 +9,6 @@ fn make_entry() -> PackageEntry {
         "nodejs".to_string(),
         "14.17.0".to_string(),
         "abc1234567890abcdef01234567890abcdef0123".to_string(),
-        "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string(),
         1234567890,
     )
 }
@@ -27,7 +26,6 @@ fn test_key_uses_attr_name_and_version() {
         "charliermarsh.ruff".to_string(),
         "2026.36.0".to_string(),
         "abc1234567890abcdef01234567890abcdef0123".to_string(),
-        "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string(),
         0,
     );
     assert_eq!(e.key(), "charliermarsh.ruff:2026.36.0");
@@ -36,10 +34,9 @@ fn test_key_uses_attr_name_and_version() {
 // ── nix generation ───────────────────────────────────────────────────────────
 
 #[test]
-fn test_nix_fetchtarball_contains_sha_and_hash() {
+fn test_nix_fetchtarball_contains_sha() {
     let nix = make_entry().to_nix_fetchtarball();
     assert!(nix.contains("abc1234567890abcdef01234567890abcdef0123.tar.gz"));
-    assert!(nix.contains("sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="));
 }
 
 #[test]

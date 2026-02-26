@@ -7,18 +7,15 @@ use tempfile::TempDir;
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 //
-// Binary storage encodes commit_sha as [u8;20] and nar_hash as [u8;32], so
-// both must be properly encoded values (40-char hex and valid SRI base64).
+// Binary storage encodes commit_sha as [u8;20] (40-char hex).
 
 const SHA1: &str = "abc1234567890abcdef01234567890abcdef0123";
 const SHA2: &str = "def1234567890abcdef01234567890abcdef0456";
 const SHA_OLD: &str = "0000000000000000000000000000000000000001";
 const SHA_NEW: &str = "0000000000000000000000000000000000000002";
-/// BASE64([0u8; 32])  =  43 'A's + '='
-const NAR: &str = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 fn node(ver: &str, sha: &str, ts: u64) -> PackageEntry {
-    PackageEntry::new("nodejs".to_string(), ver.to_string(), sha.to_string(), NAR.to_string(), ts)
+    PackageEntry::new("nodejs".to_string(), ver.to_string(), sha.to_string(), ts)
 }
 
 // ── insert / get ─────────────────────────────────────────────────────────────
@@ -32,7 +29,6 @@ fn test_insert_and_get() -> Result<()> {
         "nodejs".to_string(),
         "14.17.0".to_string(),
         SHA1.to_string(),
-        NAR.to_string(),
         1234567890,
     );
 
@@ -101,9 +97,9 @@ fn test_search_packages_prefix() -> Result<()> {
     let tmp = TempDir::new()?;
     let db = ArchiverDb::open(tmp.path())?;
 
-    let py311 = PackageEntry::new("python311".to_string(), "3.11.14".to_string(), SHA1.to_string(), NAR.to_string(), 1000);
-    let py312 = PackageEntry::new("python312".to_string(), "3.12.12".to_string(), SHA2.to_string(), NAR.to_string(), 2000);
-    let node  = PackageEntry::new("nodejs".to_string(),    "20.0.0".to_string(),  SHA_NEW.to_string(), NAR.to_string(), 3000);
+    let py311 = PackageEntry::new("python311".to_string(), "3.11.14".to_string(), SHA1.to_string(), 1000);
+    let py312 = PackageEntry::new("python312".to_string(), "3.12.12".to_string(), SHA2.to_string(), 2000);
+    let node  = PackageEntry::new("nodejs".to_string(),    "20.0.0".to_string(),  SHA_NEW.to_string(), 3000);
 
     db.insert_if_better(&py311)?;
     db.insert_if_better(&py312)?;
@@ -122,7 +118,7 @@ fn test_search_packages_exact_name() -> Result<()> {
     let tmp = TempDir::new()?;
     let db = ArchiverDb::open(tmp.path())?;
 
-    let e = PackageEntry::new("nodejs".to_string(), "20.0.0".to_string(), SHA1.to_string(), NAR.to_string(), 1000);
+    let e = PackageEntry::new("nodejs".to_string(), "20.0.0".to_string(), SHA1.to_string(), 1000);
     db.insert_if_better(&e)?;
 
     let results = db.search_packages("nodejs")?;
@@ -138,15 +134,15 @@ fn test_search_packages_contains_substring() -> Result<()> {
 
     let biome = PackageEntry::new(
         "vscode-extensions.biomejs.biome".to_string(), "2025.10.0".to_string(),
-        SHA1.to_string(), NAR.to_string(), 1000,
+        SHA1.to_string(), 1000,
     );
     let ruff = PackageEntry::new(
         "vscode-extensions.charliermarsh.ruff".to_string(), "2024.1.0".to_string(),
-        SHA2.to_string(), NAR.to_string(), 2000,
+        SHA2.to_string(), 2000,
     );
     let node = PackageEntry::new(
         "nodejs".to_string(), "20.0.0".to_string(),
-        SHA_NEW.to_string(), NAR.to_string(), 3000,
+        SHA_NEW.to_string(), 3000,
     );
     db.insert_if_better(&biome)?;
     db.insert_if_better(&ruff)?;

@@ -4,7 +4,6 @@ use archiver_core::PackageEntry;
 use git2::{Oid, Repository};
 use regex::Regex;
 
-use crate::nar::compute_nar_hash_for_blob;
 use crate::parsers::extract_packages_from_file;
 use crate::stats::CommitStats;
 
@@ -19,23 +18,11 @@ pub(super) fn process_file(
     version_regex: &Regex,
     stats: &mut CommitStats,
 ) {
-    // Get the blob from the tree
     if let Ok(object) = repo.find_object(oid, None) {
         if let Some(blob) = object.as_blob() {
-            // Calculate NAR hash from blob content
-            let nar_hash = match compute_nar_hash_for_blob(blob.content()) {
-                Ok(hash) => Some(hash),
-                Err(e) => {
-                    log::debug!("Failed to compute NAR hash for {}: {}", full_path, e);
-                    None
-                }
-            };
-            
             if let Ok(content) = std::str::from_utf8(blob.content()) {
-                // Extract all packages from this file (may be multiple)
-                let nar_hash_str = nar_hash.as_deref();
-                let packages = extract_packages_from_file(full_path, content, version_regex, nar_hash_str);
-                
+                let packages = extract_packages_from_file(full_path, content, version_regex);
+
                 for package_info in packages {
                     stats.packages_found += 1;
 
@@ -43,14 +30,12 @@ pub(super) fn process_file(
                         package_info.attr_name,
                         package_info.version,
                         commit_sha.to_string(),
-                        package_info.nar_hash.unwrap_or_else(|| "unknown".to_string()),
                         timestamp,
                     );
 
-                    // Insert into database (with deduplication)
                     match db.insert_if_better(&entry) {
                         Ok(true) => stats.packages_inserted += 1,
-                        Ok(false) => {},  // Not inserted - older version
+                        Ok(false) => {},
                         Err(e) => {
                             log::warn!("Failed to insert package {}: {:?}", entry.key(), e);
                         }

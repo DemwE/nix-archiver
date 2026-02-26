@@ -10,7 +10,6 @@ pub fn extract_packages_regex(
     path: &str,
     content: &str,
     version_regex: &Regex,
-    nar_hash: Option<String>,
 ) -> Option<PackageInfo> {
     let attr_name = extract_pname(content)
         .or_else(|| extract_callpackage_attr(content))
@@ -33,7 +32,7 @@ pub fn extract_packages_regex(
 
     let version = version?;
 
-    Some(PackageInfo { attr_name, version, nar_hash })
+    Some(PackageInfo { attr_name, version })
 }
 
 fn extract_pname(content: &str) -> Option<String> {

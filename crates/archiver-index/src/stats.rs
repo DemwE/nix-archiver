@@ -8,7 +8,6 @@ use crate::formatting::{format_number, format_duration};
 pub struct PackageInfo {
     pub attr_name: String,
     pub version: String,
-    pub nar_hash: Option<String>,
 }
 
 /// Indexing statistics

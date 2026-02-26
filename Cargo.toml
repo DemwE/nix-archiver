@@ -41,10 +41,8 @@ env_logger = "0.11.9"
 sled = "0.34.7"
 git2 = { version = "0.20.4", features = ["vendored-openssl", "vendored-libgit2"] }
 
-# Cryptography and Nix-specific
-sha2 = "0.10.9"
-data-encoding = "2.10.0" # For Base32 (Nix style)
-nix-nar = "0.3.1"
+# Cryptography
+data-encoding = "2.10.0" # For hex encoding
 semver = "1.0.27"
 
 # CLI
